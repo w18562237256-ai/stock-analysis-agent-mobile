@@ -227,6 +227,93 @@
       color: #d8ecff;
     }
 
+    .live-console {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) auto 150px;
+      gap: 12px;
+      align-items: center;
+      margin: 14px 0;
+      padding: 10px 12px;
+      border: 1px solid #294058;
+      border-radius: 8px;
+      background: #101a25;
+    }
+
+    .live-phase {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .live-icon {
+      width: 36px;
+      height: 36px;
+      flex: 0 0 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 7px;
+      color: #73c2ff;
+      background: rgba(67, 165, 255, .13);
+    }
+
+    .live-phase strong,
+    .live-phase span {
+      display: block;
+    }
+
+    .live-phase strong {
+      font-size: 15px;
+    }
+
+    .live-phase div > span {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .live-freshness {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      color: #83e7aa;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 4px rgba(40, 215, 111, .12);
+    }
+
+    .live-freshness.loading { color: #8dccff; }
+    .live-freshness.loading .live-dot { background: var(--blue); box-shadow: 0 0 0 4px rgba(67, 165, 255, .12); }
+    .live-freshness.stale { color: #ffcf70; }
+    .live-freshness.stale .live-dot { background: var(--yellow); box-shadow: 0 0 0 4px rgba(255, 189, 62, .12); }
+    .live-freshness.error { color: #ff8e9b; }
+    .live-freshness.error .live-dot { background: var(--red); box-shadow: 0 0 0 4px rgba(255, 77, 99, .12); }
+
+    .live-refresh {
+      border-color: #2b83c6;
+      background: #12304a;
+      color: #dcefff;
+    }
+
+    .live-refresh.refreshing svg {
+      animation: spin .9s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     .metrics {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
@@ -836,6 +923,10 @@
         grid-template-columns: 1fr;
       }
 
+      .live-console {
+        grid-template-columns: 1fr auto;
+      }
+
       .stock-head {
         grid-template-columns: 1fr;
       }
@@ -929,6 +1020,51 @@
         border-bottom: 1px solid #202b39;
       }
 
+      .live-console {
+        position: sticky;
+        top: 0;
+        z-index: 7;
+        grid-template-columns: minmax(0, 1fr) 104px;
+        gap: 4px 8px;
+        margin: 0 -10px 10px;
+        padding: 8px 10px;
+        border-left: 0;
+        border-right: 0;
+        border-radius: 0;
+        background: rgba(11, 17, 24, .97);
+      }
+
+      .live-phase {
+        grid-column: 1;
+        grid-row: 1;
+        gap: 8px;
+      }
+
+      .live-icon {
+        width: 32px;
+        height: 32px;
+        flex-basis: 32px;
+      }
+
+      .live-phase strong { font-size: 14px; }
+      .live-phase div > span { font-size: 11px; }
+
+      .live-freshness {
+        grid-column: 1;
+        grid-row: 2;
+        justify-content: flex-start;
+        padding-left: 40px;
+        font-size: 11px;
+      }
+
+      .live-refresh {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        min-height: 44px;
+        padding: 0 8px;
+        font-size: 12px;
+      }
+
       .tab {
         min-height: 44px;
         padding: 7px 4px;
@@ -990,7 +1126,7 @@
 
       .layout > .panel:first-child .panel-head {
         position: sticky;
-        top: 61px;
+        top: 69px;
         z-index: 3;
         background: #121922;
       }
@@ -1304,7 +1440,7 @@
         <div class="logo">A</div>
         <div>
           <h1>股票分析 Agent</h1>
-          <div class="sub" id="statusText">竞价、盘中、尾盘三种节奏独立分析</div>
+          <div class="sub" id="statusText">自动识别交易阶段 · 东方财富行情实时更新</div>
         </div>
       </div>
 
@@ -1329,11 +1465,22 @@
       </div>
     </section>
 
-    <div class="mode-tabs" role="tablist" aria-label="分析模式">
-      <button class="tab active" data-mode="auction"><i data-lucide="clock-3"></i>竞价分析</button>
-      <button class="tab" data-mode="intraday"><i data-lucide="activity"></i>盘中分析</button>
-      <button class="tab" data-mode="close"><i data-lucide="flag"></i>尾盘复盘</button>
-    </div>
+    <section class="live-console" aria-label="实时行情状态">
+      <div class="live-phase">
+        <span class="live-icon"><i data-lucide="radio-tower"></i></span>
+        <div>
+          <strong id="livePhaseName">实时看盘</strong>
+          <span id="livePhaseNote">自动识别竞价、盘中和尾盘阶段</span>
+        </div>
+      </div>
+      <div class="live-freshness" id="liveFreshness">
+        <span class="live-dot"></span>
+        <span id="liveFreshText">等待实时行情</span>
+      </div>
+      <button class="btn live-refresh" id="liveRefreshBtn" title="立即从东方财富刷新行情">
+        <i data-lucide="refresh-cw"></i><span id="liveRefreshText">立即刷新</span>
+      </button>
+    </section>
 
     <section class="metrics" id="metrics"></section>
 
@@ -1422,8 +1569,48 @@
       dataSource: "准备连接东财",
       simpleMode: true,
       refreshing: false,
-      refreshIn: 30
+      refreshIn: 20,
+      lastSuccessAt: 0,
+      lastError: "",
+      phaseName: "实时看盘",
+      phaseNote: "自动识别竞价、盘中和尾盘阶段"
     };
+
+    function marketPhase(now = new Date()) {
+      const day = now.getDay();
+      const minutes = now.getHours() * 60 + now.getMinutes();
+      if (day === 0 || day === 6) {
+        return { mode: "close", name: "休市复盘", note: "非交易日 · 显示最近行情与风险预案" };
+      }
+      if (minutes < 9 * 60 + 15) {
+        return { mode: "auction", name: "盘前准备", note: "9:15 后自动进入集合竞价监控" };
+      }
+      if (minutes < 9 * 60 + 30) {
+        return { mode: "auction", name: "集合竞价", note: "重点监控高开、竞价量和开盘承接" };
+      }
+      if (minutes < 11 * 60 + 30) {
+        return { mode: "intraday", name: "盘中实时", note: "自动跟踪量价、支撑压力和主力方向" };
+      }
+      if (minutes < 13 * 60) {
+        return { mode: "intraday", name: "午间休市", note: "保留上午行情，13:00 自动恢复实时监控" };
+      }
+      if (minutes < 14 * 60 + 50) {
+        return { mode: "intraday", name: "盘中实时", note: "自动跟踪量价、支撑压力和主力方向" };
+      }
+      if (minutes < 15 * 60) {
+        return { mode: "close", name: "尾盘监控", note: "重点判断抢筹、兑现和隔夜风险" };
+      }
+      return { mode: "close", name: "收盘复盘", note: "整理收盘强弱、次日观察价和隔夜预案" };
+    }
+
+    function syncMarketPhase() {
+      const phase = marketPhase();
+      const changed = phase.mode !== state.mode;
+      state.mode = phase.mode;
+      state.phaseName = phase.name;
+      state.phaseNote = phase.note;
+      return changed;
+    }
 
     const modeCopy = {
       auction: {
@@ -2070,23 +2257,31 @@
 
     async function generate() {
       if (state.refreshing) return;
+      syncMarketPhase();
       const codes = [...new Set([...(state.codes.length ? state.codes : defaultCodes()), ...state.queryCodes])];
       state.refreshing = true;
-      state.refreshIn = 30;
+      state.refreshIn = 20;
       state.dataSource = "正在拉取东方财富行情...";
       render();
       try {
         const eastmoneyStocks = await fetchEastmoneyStocks(codes);
         state.stocks = withModeScores(eastmoneyStocks).sort((a, b) => b.score - a.score);
-        state.dataSource = `东方财富实时行情 · ${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
+        state.lastSuccessAt = Date.now();
+        state.lastError = "";
+        state.dataSource = `东方财富实时行情 · ${new Date(state.lastSuccessAt).toLocaleTimeString("zh-CN", { hour12: false })}`;
       } catch (error) {
         console.warn(error);
-        state.stocks = withModeScores(codes.map(makeStock)).sort((a, b) => b.score - a.score);
-        state.dataSource = `东财拉取失败，已用模拟数据回退 · ${error.message}`;
+        state.lastError = error.message;
+        state.stocks = state.stocks.length
+          ? withModeScores(state.stocks).sort((a, b) => b.score - a.score)
+          : withModeScores(codes.map(makeStock)).sort((a, b) => b.score - a.score);
+        state.dataSource = state.lastSuccessAt
+          ? `实时刷新失败，保留上次行情 · ${error.message}`
+          : `东财暂未返回，当前仅作界面演示 · ${error.message}`;
       }
       if (!state.stocks.some(s => s.code === state.selected)) state.selected = state.stocks[0]?.code;
       state.refreshing = false;
-      state.refreshIn = 30;
+      state.refreshIn = 20;
       render();
     }
 
@@ -2138,9 +2333,40 @@
     function updateRefreshControls() {
       const text = document.getElementById("refreshCountdown");
       const btn = document.getElementById("quickRefreshBtn");
-      if (!text || !btn) return;
-      text.textContent = state.refreshing ? "刷新中" : `刷新 ${state.refreshIn}s`;
-      btn.classList.toggle("refreshing", state.refreshing);
+      if (text) text.textContent = state.refreshing ? "刷新中" : `刷新 ${state.refreshIn}s`;
+      if (btn) btn.classList.toggle("refreshing", state.refreshing);
+
+      const phaseName = document.getElementById("livePhaseName");
+      const phaseNote = document.getElementById("livePhaseNote");
+      const freshness = document.getElementById("liveFreshness");
+      const freshText = document.getElementById("liveFreshText");
+      const liveBtn = document.getElementById("liveRefreshBtn");
+      const liveText = document.getElementById("liveRefreshText");
+      if (phaseName) phaseName.textContent = state.phaseName;
+      if (phaseNote) phaseNote.textContent = `${state.phaseNote} · 20秒自动更新`;
+      if (liveText) liveText.textContent = state.refreshing ? "刷新中" : "立即刷新";
+      if (liveBtn) liveBtn.classList.toggle("refreshing", state.refreshing);
+      if (!freshness || !freshText) return;
+
+      freshness.className = "live-freshness";
+      const age = state.lastSuccessAt ? Math.floor((Date.now() - state.lastSuccessAt) / 1000) : Infinity;
+      if (state.refreshing) {
+        freshness.classList.add("loading");
+        freshText.textContent = "正在连接东方财富...";
+      } else if (state.lastError) {
+        freshness.classList.add("error");
+        freshText.textContent = state.lastSuccessAt
+          ? `刷新失败 · 保留 ${new Date(state.lastSuccessAt).toLocaleTimeString("zh-CN", { hour12: false })} 行情`
+          : "实时行情连接失败 · 请手动刷新";
+      } else if (!state.lastSuccessAt) {
+        freshness.classList.add("stale");
+        freshText.textContent = "等待首次实时行情";
+      } else if (age > 45) {
+        freshness.classList.add("stale");
+        freshText.textContent = `行情已 ${age} 秒未更新 · 建议刷新`;
+      } else {
+        freshText.textContent = `实时 ${new Date(state.lastSuccessAt).toLocaleTimeString("zh-CN", { hour12: false })} · 下次 ${state.refreshIn}s`;
+      }
     }
 
     function scrollAnalysisIntoView() {
@@ -2452,7 +2678,7 @@
           <div class="quick-head">
             <div>
               <div class="quick-name">${stock.name}</div>
-              <div class="code">${stock.code} · ${stock.industry || stock.board} · ${modeCopy[state.mode].title}</div>
+              <div class="code">${stock.code} · ${stock.industry || stock.board} · ${state.phaseName}</div>
             </div>
             <div>
               <div class="quick-price ${stock.chg >= 0 ? "price-up" : "price-down"}">${stock.price}</div>
@@ -2495,7 +2721,7 @@
             <span class="badge ${action[0].includes("出货") || action[0].includes("不隔夜") ? "sell" : action[0].includes("等待") || action[0].includes("观察") ? "wait" : "buy"}">${action[0]}</span>
             <span class="badge info">置信度 ${stock.confidence}%</span>
             <span class="badge">${action[1]}</span>
-            <span class="badge info">${modeCopy[state.mode].title}</span>
+            <span class="badge info">${state.phaseName}</span>
           </div>
           <div class="grid2">
             <div class="kv">
@@ -2630,15 +2856,6 @@
       lucide.createIcons();
     }
 
-    document.querySelectorAll(".tab").forEach(tab => {
-      tab.addEventListener("click", () => {
-        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-        tab.classList.add("active");
-        state.mode = tab.dataset.mode;
-        generate();
-      });
-    });
-
     document.getElementById("refreshBtn").addEventListener("click", addCodesFromInput);
     document.getElementById("queryBtn").addEventListener("click", queryCodesFromInput);
     document.getElementById("codesInput").addEventListener("keydown", event => {
@@ -2647,21 +2864,35 @@
     document.getElementById("pullBtn").addEventListener("click", () => {
       generate();
     });
+    document.getElementById("liveRefreshBtn").addEventListener("click", generate);
     document.getElementById("quickRefreshBtn").addEventListener("click", generate);
     document.getElementById("prevStockBtn").addEventListener("click", () => selectRelativeStock(-1));
     document.getElementById("nextStockBtn").addEventListener("click", () => selectRelativeStock(1));
     setInterval(() => {
       const editing = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName);
+      const phaseChanged = syncMarketPhase();
       if (document.body.classList.contains("locked") || document.hidden || state.refreshing || editing) {
         updateRefreshControls();
+        return;
+      }
+      if (phaseChanged) {
+        generate();
         return;
       }
       state.refreshIn -= 1;
       if (state.refreshIn <= 0) generate();
       else updateRefreshControls();
     }, 1000);
+    document.addEventListener("visibilitychange", () => {
+      const age = state.lastSuccessAt ? Date.now() - state.lastSuccessAt : Infinity;
+      if (!document.hidden && !document.body.classList.contains("locked") && age > 25000) generate();
+    });
+    window.addEventListener("online", () => {
+      if (!document.body.classList.contains("locked")) generate();
+    });
     state.codes = loadSavedCodes();
     loadSimpleMode();
+    syncMarketPhase();
     syncCodeInput("");
     setupAccessGate();
     if (!document.body.classList.contains("locked")) generate();
