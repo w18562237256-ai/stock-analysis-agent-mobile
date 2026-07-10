@@ -1234,7 +1234,7 @@
 
       .quick-levels {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         border-top: 1px solid #233040;
         border-bottom: 1px solid #233040;
       }
@@ -1256,7 +1256,47 @@
       .quick-level b {
         display: block;
         margin-top: 5px;
-        font-size: 17px;
+        font-size: 14px;
+        overflow-wrap: anywhere;
+      }
+
+      .plan-lock-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 9px 14px;
+        border-bottom: 1px solid #233040;
+        color: #8fcfff;
+        font-size: 11px;
+        line-height: 1.4;
+      }
+
+      .plan-lock-row span {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        min-width: 0;
+      }
+
+      .plan-lock-row svg {
+        width: 14px;
+        height: 14px;
+        flex: 0 0 14px;
+      }
+
+      .plan-lock-row button {
+        min-height: 30px;
+        flex: 0 0 auto;
+        border: 1px solid #31516c;
+        border-radius: 5px;
+        background: #12283a;
+        color: #cbe8ff;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 0 8px;
+        font-size: 11px;
       }
 
       .quick-note {
@@ -1721,6 +1761,118 @@
       localStorage.setItem("stockAgentSimpleMode", state.simpleMode ? "1" : "0");
     }
 
+    function tradingDayKey(date = new Date()) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+
+    function executionPlanKey(code) {
+      return `stockAgentExecutionPlan:${tradingDayKey()}:${code}`;
+    }
+
+    function buildExecutionPlan(stock) {
+      const digits = priceDigits(stock.price);
+      const buyLow = +stock.support1.toFixed(digits);
+      const buyHigh = +(stock.support1 * 1.012).toFixed(digits);
+      const breakout = +(stock.pressure1 * 1.004).toFixed(digits);
+      const target1 = +stock.pressure1.toFixed(digits);
+      const target2 = +(stock.pressure2 || stock.pressure1 * 1.045).toFixed(digits);
+      return {
+        version: 1,
+        date: tradingDayKey(),
+        code: stock.code,
+        createdAt: Date.now(),
+        anchorPrice: stock.price,
+        buyLow,
+        buyHigh,
+        breakout,
+        noChaseAbove: +(breakout * 1.018).toFixed(digits),
+        target1,
+        target2,
+        stop: +stock.stop.toFixed(digits),
+        events: {}
+      };
+    }
+
+    function getExecutionPlan(stock) {
+      let plan;
+      try {
+        plan = JSON.parse(localStorage.getItem(executionPlanKey(stock.code)) || "null");
+      } catch {
+        plan = null;
+      }
+      if (!plan || plan.date !== tradingDayKey() || plan.version !== 1) {
+        plan = buildExecutionPlan(stock);
+        if (state.lastSuccessAt && stock.source === "东方财富") {
+          localStorage.setItem(executionPlanKey(stock.code), JSON.stringify(plan));
+        }
+      }
+      return plan;
+    }
+
+    function updateExecutionPlanEvents(stock, plan) {
+      if (!state.lastSuccessAt || stock.source !== "东方财富") return plan;
+      const holding = readHolding(stock.code);
+      const hasHolding = Number(holding.cost) > 0 && Number(holding.shares) > 0;
+      const checks = {
+        buyZone: stock.price >= plan.buyLow && stock.price <= plan.buyHigh,
+        breakout: stock.price >= plan.breakout,
+        target1: hasHolding && stock.price >= plan.target1,
+        target2: hasHolding && stock.price >= plan.target2,
+        stop: stock.price <= plan.stop
+      };
+      let changed = false;
+      Object.entries(checks).forEach(([name, hit]) => {
+        if (hit && !plan.events?.[name]) {
+          plan.events ||= {};
+          plan.events[name] = { time: Date.now(), price: stock.price };
+          changed = true;
+        }
+      });
+      if (changed) localStorage.setItem(executionPlanKey(stock.code), JSON.stringify(plan));
+      return plan;
+    }
+
+    function resetExecutionPlan(code) {
+      localStorage.removeItem(executionPlanKey(code));
+      render();
+    }
+
+    function executionSignal(stock, plan) {
+      const holding = readHolding(stock.code);
+      const hasHolding = Number(holding.cost) > 0 && Number(holding.shares) > 0;
+      if (stock.stRiskLevel === "高") return ["风险排除", "基本面/ST风险高", "不参与交易"];
+      if (hasHolding) {
+        if (stock.price <= plan.stop) return ["止损触发", `跌破固定止损 ${plan.stop}`, "优先执行风控"];
+        if (stock.price >= plan.target2) return ["止盈触发", `到达第二目标 ${plan.target2}`, "分批兑现剩余仓位"];
+        if (stock.price >= plan.target1) return ["减仓触发", `到达第一目标 ${plan.target1}`, "先兑现一部分"];
+        return ["持有观察", `卖点 ${plan.target1}/${plan.target2} 未到`, `跌破 ${plan.stop} 执行止损`];
+      }
+      if (stock.price <= plan.stop) return ["计划失效", `跌破固定止损 ${plan.stop}`, "今日不再开仓"];
+      if (stock.price >= plan.buyLow && stock.price <= plan.buyHigh) {
+        if (stock.net >= 0 && stock.score >= 60) return ["低吸触发", `进入固定区 ${plan.buyLow}-${plan.buyHigh}`, "按计划小仓确认"];
+        return ["到价未确认", "已进低吸区但资金偏弱", "等主力转正再决定"];
+      }
+      if (stock.price >= plan.breakout) {
+        if (stock.price > plan.noChaseAbove) return ["今日错过", `已高于追价上限 ${plan.noChaseAbove}`, "不再移动买点追高"];
+        if (stock.net >= 0 && stock.score >= 70) return ["突破触发", `站上固定突破价 ${plan.breakout}`, "确认后按计划试仓"];
+        return ["突破未确认", "价格突破但资金或强度不足", "暂不买入"];
+      }
+      if (stock.price < plan.buyLow) return ["等待企稳", `现价低于固定低吸区 ${plan.buyLow}`, "不急着接下跌"];
+      return ["等待触发", `低吸区 ${plan.buyLow}-${plan.buyHigh} / 突破 ${plan.breakout}`, "今日价位保持不变"];
+    }
+
+    function planEventText(plan) {
+      const labels = { buyZone: "低吸区", breakout: "突破", target1: "一档止盈", target2: "二档止盈", stop: "止损" };
+      const items = Object.entries(plan.events || {}).map(([name, event]) => {
+        const time = new Date(event.time).toLocaleTimeString("zh-CN", { hour12: false, hour: "2-digit", minute: "2-digit" });
+        return `${labels[name]} ${time}@${event.price}`;
+      });
+      return items.length ? `今日已触发：${items.join(" · ")}` : "今日尚未触发固定价位";
+    }
+
     function reviewHistoryKey() {
       return "stockAgentReviewHistory";
     }
@@ -1740,6 +1892,7 @@
     function appendReview(stock, action) {
       const items = readReviewHistory();
       const target = targetValuation(stock);
+      const plan = getExecutionPlan(stock);
       const item = {
         id: `${Date.now()}-${stock.code}`,
         time: new Date().toLocaleString("zh-CN", { hour12: false }),
@@ -1750,9 +1903,9 @@
         action: action[0],
         price: stock.price,
         score: stock.score,
-        support: stock.support1,
-        pressure: stock.pressure1,
-        stop: stock.stop,
+        support: plan.buyLow,
+        pressure: plan.target1,
+        stop: plan.stop,
         targetPrice: target.targetPrice ? +target.targetPrice.toFixed(2) : 0
       };
       saveReviewHistory([item, ...items]);
@@ -2134,7 +2287,7 @@
       const history = readReviewHistory().slice(0, 5);
       const stats = reviewStats(readReviewHistory());
       const simpleText = state.simpleMode
-        ? `<div class="mini-card"><b>一句话</b><span>${stock.stRiskLevel === "高" ? "这只先别碰，风险标签太重。" : stock.score >= 75 ? `只等回踩${stock.support1}附近，不追高。` : "先观察，等资金和价格同时确认。"}</span></div>`
+        ? `<div class="mini-card"><b>当前执行信号</b><span>${trigger.signal[0]}：${trigger.signal[1]}，${trigger.signal[2]}。</span></div>`
         : "";
       return `
         <div class="tool-panel">
@@ -2146,8 +2299,9 @@
           <div class="tool-grid">
             ${simpleText}
             <div class="mini-card"><b>板块联动</b><span>${stock.industry || "--"}：${sector.strength}，池内${sector.count}只，红盘${sector.upCount}只，${sector.role}。</span></div>
-            <div class="mini-card"><b>买卖触发</b><span>买入区间 ${trigger.buyZone}；${trigger.noChase}；止损 ${trigger.stop}；仓位 ${trigger.position}。</span></div>
-            <div class="mini-card"><b>触发条件</b><span>${trigger.condition}；目标先看 ${trigger.takeProfit}。</span></div>
+            <div class="mini-card"><b>固定买点</b><span>低吸 ${trigger.buyZone}；突破 ${trigger.breakout}；${trigger.noChase}；仓位 ${trigger.position}。</span></div>
+            <div class="mini-card"><b>固定卖点</b><span>第一止盈 ${trigger.takeProfit}；第二止盈 ${trigger.takeProfit2}；止损 ${trigger.stop}。</span></div>
+            <div class="mini-card"><b>今日触发记录</b><span>${trigger.eventText}</span></div>
           </div>
           <div class="target-inputs">
             <label>
@@ -2167,6 +2321,7 @@
           <div class="alert-list">
             ${alerts.map(([cls, text]) => `<div class="alert-item ${cls}">${text}</div>`).join("")}
           </div>
+          <button class="btn ghost reset-plan-btn" data-reset-plan="${stock.code}" style="width:100%; margin-top:10px;"><i data-lucide="rotate-ccw"></i>按当前行情重定计划</button>
           <button class="btn ghost" id="recordReviewBtn" style="width:100%; margin-top:10px;"><i data-lucide="archive"></i>记录本次判断</button>
           ${history.length ? `
             <div class="mini-card" style="margin-top:10px;">
@@ -2257,21 +2412,8 @@
     }
 
     function modeAdjustedAdvice(stock) {
-      const positive = stock.score >= 72 && stock.net > 0;
-      const weak = stock.score < 50 || stock.net < -30000;
-      if (state.mode === "auction") {
-        if (positive) return ["强烈关注", "竞价强承接", "开盘不破竞价均线再跟随"];
-        if (weak) return ["谨慎过滤", "竞价资金偏弱", "开盘冲高先看兑现"];
-        return ["低吸候选", "竞价信号一般", "等回踩支撑位确认"];
-      }
-      if (state.mode === "intraday") {
-        if (positive) return ["吸筹", "量能延续", "回踩不破可分批观察"];
-        if (weak) return ["出货", "大单流出", "先降仓位等风险释放"];
-        return ["等待", "震荡整理", "突破压力位再看"];
-      }
-      if (positive) return ["隔夜候选", "尾盘抢筹", "仓位控制后可留观察"];
-      if (weak) return ["不隔夜", "尾盘走弱", "次日先看修复力度"];
-      return ["观察", "收盘中性", "明日确认方向"];
+      const plan = updateExecutionPlanEvents(stock, getExecutionPlan(stock));
+      return executionSignal(stock, plan);
     }
 
     async function generate() {
@@ -2465,90 +2607,35 @@
       });
     }
 
-    function explainLines(stock, action) {
+    function explainLines(stock, action, plan) {
       const upText = stock.chg >= 0 ? `当前涨了${stock.chg}%` : `当前跌了${Math.abs(stock.chg)}%`;
       const netText = stock.net >= 0 ? "主力资金在流入，承接还在" : "主力资金在流出，短线要防兑现";
-      if (state.mode === "auction") {
-        return [
-          `${stock.name}开盘价${stock.open ?? "--"}元，竞价高开幅度约${stock.openPct ?? "--"}%。`,
-          `开盘后相对开盘价${stock.openHold >= 0 ? "走强" : "走弱"}${Math.abs(stock.openHold ?? 0)}%，这是判断竞价承接的核心。`,
-          `如果开盘后不破${stock.open ?? stock.support1}元，说明竞价资金没有马上兑现。`,
-          `第一买点看${stock.open ?? stock.support1}附近承接，第二买点看${stock.support1}附近回踩。`,
-          `冲到${stock.pressure1}元附近要看量能，没量容易冲高回落。`,
-          `${netText}，竞价策略更重视“开盘不破”和“回踩缩量”。`,
-          `结论：${action[0]}，置信度${stock.confidence}%，不追秒板，先等开盘后的第一轮承接。`
-        ];
-      }
-      if (state.mode === "intraday") {
-        return [
-          `${stock.name}现价${stock.price}元，${upText}。`,
-          `分时位置在全天区间的${stock.closePos ?? 50}%附近，位置越高越要确认量能。`,
-          `${netText}，大单方向决定盘中弹性。`,
-          `下方支撑看${stock.support1}元，跌破说明盘中承接变弱。`,
-          `上方压力看${stock.pressure1}元，放量突破才更像有效进攻。`,
-          `换手率${stock.turnover ?? "--"}%，成交额${stock.amount}亿，决定能不能做T。`,
-          `结论：${action[0]}，盘中不确定性更高，仓位要比竞价计划更灵活。`
-        ];
-      }
       return [
-        `${stock.name}尾盘价格${stock.price}元，${upText}。`,
-        `收盘位置在全天区间的${stock.closePos ?? 50}%附近，越靠近高位越容易有隔夜预期。`,
-        `${netText}，尾盘更怕拉高出货。`,
-        `明日观察价先看${stock.pressure1}元，过不去就容易转震荡。`,
-        `隔夜风控线放在${stock.stop}元，低开破位要优先处理风险。`,
-        `如果尾盘站不稳${stock.support1}元，明天先按弱修复看。`,
-        `结论：${action[0]}，尾盘重点不是追涨，而是决定要不要留仓过夜。`
+        `${stock.name}现价${stock.price}元，${upText}；${netText}。`,
+        `本计划在${new Date(plan.createdAt).toLocaleTimeString("zh-CN", { hour12: false })}按${plan.anchorPrice}元锁定，今天实时刷新不会再移动价位。`,
+        `低吸只看固定区间${plan.buyLow}-${plan.buyHigh}，到价后还要满足资金不弱，不是碰到就买。`,
+        `突破只认固定价${plan.breakout}，高于${plan.noChaseAbove}视为错过，今天不再追。`,
+        `持仓卖点固定为${plan.target1}先减仓、${plan.target2}再止盈；跌破${plan.stop}执行止损。`,
+        `${planEventText(plan)}。`,
+        `当前结论：${action[0]}。${action[1]}，${action[2]}。`
       ];
     }
 
-    function modeKeyValues(stock, buy, stop) {
-      if (state.mode === "auction") {
-        return {
-          left: [
-            ["竞价/开盘价", stock.open ?? "--"],
-            ["高开幅度", `${stock.openPct ?? "--"}%`],
-            ["开盘承接", `${stock.openHold ?? "--"}%`],
-            ["竞价成交额", `${stock.amount}亿`]
-          ],
-          right: [
-            ["回踩买点", stock.support1],
-            ["冲高压力", stock.pressure1],
-            ["竞价失效线", stop],
-            ["主力净额", fmtMoney(stock.net), stock.net >= 0 ? "price-up" : "price-down"],
-            ["行业", stock.industry || "--"]
-          ]
-        };
-      }
-      if (state.mode === "intraday") {
-        return {
-          left: [
-            ["现价", stock.price],
-            ["日内位置", `${stock.closePos ?? "--"}%`],
-            ["换手率", `${stock.turnover ?? "--"}%`],
-            ["成交额", `${stock.amount}亿`]
-          ],
-          right: [
-            ["盘中支撑", stock.support1],
-            ["盘中压力", stock.pressure1],
-            ["做T止损", stop],
-            ["主力净额", fmtMoney(stock.net), stock.net >= 0 ? "price-up" : "price-down"],
-            ["筹码集中度", stock.concentration]
-          ]
-        };
-      }
+    function modeKeyValues(stock, plan) {
       return {
         left: [
-          ["尾盘价", stock.price],
-          ["收盘位置", `${stock.closePos ?? "--"}%`],
+          ["现价", stock.price],
+          ["今日开盘", stock.open ?? "--"],
           ["全天最高", stock.high ?? "--"],
-          ["全天最低", stock.low ?? "--"]
+          ["全天最低", stock.low ?? "--"],
+          ["主力净额", fmtMoney(stock.net), stock.net >= 0 ? "price-up" : "price-down"]
         ],
         right: [
-          ["明日观察价", stock.pressure1],
-          ["隔夜风控线", stop],
-          ["低开承接位", stock.support1],
-          ["主力净额", fmtMoney(stock.net), stock.net >= 0 ? "price-up" : "price-down"],
-          ["隔夜风险", `${stock.risk}分`]
+          ["固定低吸区", `${plan.buyLow}-${plan.buyHigh}`],
+          ["固定突破价", plan.breakout],
+          ["第一止盈", plan.target1],
+          ["第二止盈", plan.target2],
+          ["固定止损", plan.stop]
         ]
       };
     }
@@ -2565,28 +2652,12 @@
       return ["明日溢价率", "隔夜风险", "尾盘流动性"];
     }
 
-    function actionCards(stock, buy, sell) {
-      if (state.mode === "auction") {
-        return [
-          ["不追高开", `高开后先看${stock.open ?? buy}是否守住，破了就过滤`],
-          ["回踩低吸", `回踩${buy}附近缩量、有承接再考虑`],
-          ["冲高兑现", `靠近${sell}没继续放量，先落袋一部分`],
-          ["竞价失效", `开盘急跌破${stock.support1}，放弃竞价计划`]
-        ];
-      }
-      if (state.mode === "intraday") {
-        return [
-          ["盘中低吸", `回踩${buy}不破，且主力净额不继续恶化`],
-          ["做T高抛", `冲到${sell}附近看卖压，转弱就减`],
-          ["追涨条件", `放量突破${sell}后再看加速，不提前抢`],
-          ["风险处理", `跌破${stock.stop}，短线计划失效`]
-        ];
-      }
+    function actionCards(stock, plan) {
       return [
-        ["留仓条件", `收在${stock.support1}上方且尾盘不跳水`],
-        ["隔夜仓位", `只留确认仓，不把盘中利润全压过夜`],
-        ["明日高开", `高开冲${sell}先看兑现，不盲目加仓`],
-        ["明日低开", `低开破${stock.stop}先控风险，再等修复`]
+        ["低吸触发", `进入${plan.buyLow}-${plan.buyHigh}且主力不弱，才考虑小仓确认`],
+        ["突破触发", `站上${plan.breakout}且不高于${plan.noChaseAbove}，资金同步转强才买`],
+        ["分批卖出", `到${plan.target1}先减仓，到${plan.target2}再兑现，不等移动目标`],
+        ["风险处理", `跌破固定止损${plan.stop}，当天计划失效`]
       ];
     }
 
@@ -2602,44 +2673,55 @@
     }
 
     function tradeTriggers(stock) {
-      const buyLow = stock.support1;
-      const buyHigh = +(stock.support1 * 1.012).toFixed(priceDigits(stock.price));
-      const noChase = +(stock.pressure1 * .99).toFixed(priceDigits(stock.price));
-      const stop = stock.stop;
+      const plan = updateExecutionPlanEvents(stock, getExecutionPlan(stock));
+      const signal = executionSignal(stock, plan);
       const position = stock.stRiskLevel === "高" ? "0成，先排除" : stock.score >= 80 ? "2-3成试仓" : stock.score >= 65 ? "1-2成低吸" : "0-1成观察";
       return {
-        buyZone: `${buyLow}-${buyHigh}`,
-        noChase: `${noChase}以上不追`,
-        stop,
-        takeProfit: stock.pressure1,
+        plan,
+        buyZone: `${plan.buyLow}-${plan.buyHigh}`,
+        breakout: plan.breakout,
+        noChase: `${plan.noChaseAbove}以上不追`,
+        stop: plan.stop,
+        takeProfit: plan.target1,
+        takeProfit2: plan.target2,
         position,
-        condition: stock.net >= 0 ? "主力净额不转负且回踩缩量" : "先等主力净额转正"
+        condition: signal[1],
+        signal,
+        eventText: planEventText(plan)
       };
     }
 
     function holdingView(stock) {
+      const planLevels = getExecutionPlan(stock);
       const holding = readHolding(stock.code);
       const cost = Number(holding.cost) || 0;
       const shares = Number(holding.shares) || 0;
       const profit = cost > 0 && shares > 0 ? (stock.price - cost) * shares : 0;
       const profitPct = cost > 0 ? ((stock.price / cost - 1) * 100) : 0;
-      const maxRisk = cost > 0 && shares > 0 ? Math.max(0, (cost - stock.stop) * shares) : 0;
+      const maxRisk = cost > 0 && shares > 0 ? Math.max(0, (cost - planLevels.stop) * shares) : 0;
       const plan = !cost || !shares
         ? "未填写持仓，按观察计划处理。"
-        : profit >= 0
-          ? `浮盈${profitPct.toFixed(1)}%，冲到${stock.pressure1}附近可分批兑现。`
-          : `浮亏${Math.abs(profitPct).toFixed(1)}%，跌破${stock.stop}优先控制风险。`;
+        : stock.price >= planLevels.target2
+          ? `已到二档止盈${planLevels.target2}，优先兑现。`
+          : stock.price >= planLevels.target1
+            ? `已到一档止盈${planLevels.target1}，先减仓。`
+            : stock.price <= planLevels.stop
+              ? `已破固定止损${planLevels.stop}，优先控制风险。`
+              : `卖点固定在${planLevels.target1}/${planLevels.target2}，止损${planLevels.stop}。`;
       return { holding, cost, shares, profit, profitPct, maxRisk, plan };
     }
 
     function pageAlerts(stock) {
+      const plan = updateExecutionPlanEvents(stock, getExecutionPlan(stock));
+      const signal = executionSignal(stock, plan);
       const alerts = [];
       if (stock.stRiskLevel === "高") alerts.push(["danger", "基本面/ST风险高：优先排除，不参与短线博弈。"]);
-      if (stock.price <= stock.stop) alerts.push(["danger", `已接近/跌破止损线 ${stock.stop}，先处理风险。`]);
-      if (stock.price >= stock.pressure1) alerts.push(["warn", `已到压力位 ${stock.pressure1} 附近，注意冲高兑现。`]);
+      if (signal[0].includes("止损") || signal[0].includes("失效")) alerts.push(["danger", `${signal[0]}：${signal[1]}。`]);
+      if (signal[0].includes("止盈") || signal[0].includes("减仓")) alerts.push(["warn", `${signal[0]}：${signal[1]}。`]);
+      if (signal[0].includes("低吸") || signal[0].includes("突破触发")) alerts.push(["", `${signal[0]}：${signal[1]}。`]);
+      if (signal[0].includes("错过")) alerts.push(["warn", `${signal[0]}：${signal[1]}，不移动价位追高。`]);
       if (stock.net < 0) alerts.push(["warn", `主力净额为 ${fmtMoney(stock.net)}，盘中不要盲目加仓。`]);
-      if (stock.score >= 80 && stock.net >= 0) alerts.push(["", "强势信号：回踩不破支撑且缩量时优先观察低吸。"]);
-      if (!alerts.length) alerts.push(["", "暂无强预警，按计划观察支撑、压力和资金方向。"]);
+      if (!alerts.length) alerts.push(["", `${signal[0]}：${signal[1]}。固定计划不会随刷新变化。`]);
       return alerts;
     }
 
@@ -2687,19 +2769,20 @@
     function renderMain() {
       const stock = state.stocks.find(s => s.code === state.selected) || state.stocks[0];
       if (!stock) return;
-      const action = modeAdjustedAdvice(stock);
-      const cardClass = action[0].includes("出货") || action[0].includes("不隔夜") || action[0].includes("谨慎") ? "risk" : action[0].includes("等待") || action[0].includes("观察") ? "warn" : "";
-      const buy = stock.support1;
-      const sell = stock.pressure1;
-      const stop = stock.stop;
-      const lines = explainLines(stock, action);
-      const modeValues = modeKeyValues(stock, buy, stop);
+      const plan = updateExecutionPlanEvents(stock, getExecutionPlan(stock));
+      const action = executionSignal(stock, plan);
+      const riskSignal = /止损|失效|风险/.test(action[0]);
+      const sellSignal = /止盈|减仓/.test(action[0]);
+      const waitSignal = /等待|错过|未确认|观察|企稳/.test(action[0]);
+      const cardClass = riskSignal ? "risk" : waitSignal || sellSignal ? "warn" : "";
+      const lines = explainLines(stock, action, plan);
+      const modeValues = modeKeyValues(stock, plan);
       const scoreLabels = modeScoreLabels();
       const barLabels = modeBarLabels();
-      const cards = actionCards(stock, buy, sell);
+      const cards = actionCards(stock, plan);
       const triggers = tradeTriggers(stock);
       const topAlert = pageAlerts(stock)[0];
-      const signalClass = cardClass === "risk" ? "sell" : cardClass === "warn" ? "wait" : "buy";
+      const signalClass = riskSignal || sellSignal ? "sell" : waitSignal ? "wait" : "buy";
       const compactView = state.simpleMode && window.matchMedia("(max-width: 640px)").matches;
       document.getElementById("mainAnalysis").innerHTML = `
         <section class="quick-board">
@@ -2721,17 +2804,22 @@
             </div>
           </div>
           <div class="quick-levels">
-            <div class="quick-level"><span>回踩支撑</span><b class="price-up">${buy}</b></div>
-            <div class="quick-level"><span>冲高压力</span><b class="price-down">${sell}</b></div>
-            <div class="quick-level"><span>计划止损</span><b>${stop}</b></div>
+            <div class="quick-level"><span>固定低吸区</span><b class="price-up">${plan.buyLow}-${plan.buyHigh}</b></div>
+            <div class="quick-level"><span>固定突破</span><b>${plan.breakout}</b></div>
+            <div class="quick-level"><span>止盈一/二</span><b class="price-down">${plan.target1}/${plan.target2}</b></div>
+            <div class="quick-level"><span>固定止损</span><b>${plan.stop}</b></div>
+          </div>
+          <div class="plan-lock-row">
+            <span><i data-lucide="lock-keyhole"></i>今日计划锁定 · ${planEventText(plan)}</span>
+            <button class="reset-plan-btn" data-reset-plan="${stock.code}" title="按当前行情重新计算"><i data-lucide="rotate-ccw"></i>重定</button>
           </div>
           <div class="quick-note ${topAlert[0] || ""}">${topAlert[1]} 主力净额 ${fmtMoney(stock.net)}。</div>
         </section>
         ${compactView ? `
           <section class="compact-plan">
-            <div class="mini-card"><b>低吸区间</b>${triggers.buyZone}<br><span class="code">${triggers.condition}</span></div>
-            <div class="mini-card"><b>冲高处理</b>${triggers.takeProfit} 附近<br><span class="code">不放量先减仓</span></div>
-            <div class="mini-card"><b>仓位与风控</b>${triggers.position} · 跌破 ${triggers.stop} 计划失效</div>
+            <div class="mini-card"><b>${triggers.signal[0]}</b>${triggers.signal[1]}<br><span class="code">${triggers.signal[2]}</span></div>
+            <div class="mini-card"><b>固定卖点</b>${triggers.takeProfit} 先减 / ${triggers.takeProfit2} 止盈<br><span class="code">不随实时价格上移</span></div>
+            <div class="mini-card"><b>仓位与风控</b>${triggers.position} · 跌破 ${triggers.stop} 当日计划失效</div>
           </section>
         ` : `
         <article class="agent-card">
@@ -2746,7 +2834,7 @@
             </div>
           </div>
           <div class="badges">
-            <span class="badge ${action[0].includes("出货") || action[0].includes("不隔夜") ? "sell" : action[0].includes("等待") || action[0].includes("观察") ? "wait" : "buy"}">${action[0]}</span>
+            <span class="badge ${signalClass}">${action[0]}</span>
             <span class="badge info">置信度 ${stock.confidence}%</span>
             <span class="badge">${action[1]}</span>
             <span class="badge info">${state.phaseName}</span>
@@ -2776,11 +2864,12 @@
           ${renderDecisionTools(stock)}
           ${state.simpleMode ? "" : renderFundamentalPanel(stock)}
           <div class="strategy ${cardClass}">
-            <div class="section-title"><i data-lucide="badge-check"></i>${modeCopy[state.mode].actionName} · ${action[0]} · ${action[2]}</div>
+            <div class="section-title"><i data-lucide="badge-check"></i>今日固定计划 · ${action[0]} · ${action[2]}</div>
             <div class="kv">
-              <div><span>买入价</span><b class="price-up">${buy}</b></div>
-              <div><span>卖出价</span><b class="price-down">${sell}</b></div>
-              <div><span>止损价</span><b class="price-up">${stop}</b></div>
+              <div><span>低吸区</span><b class="price-up">${plan.buyLow}-${plan.buyHigh}</b></div>
+              <div><span>突破价 / 追价上限</span><b>${plan.breakout} / ${plan.noChaseAbove}</b></div>
+              <div><span>止盈一 / 止盈二</span><b class="price-down">${plan.target1} / ${plan.target2}</b></div>
+              <div><span>固定止损</span><b class="price-up">${plan.stop}</b></div>
             </div>
             <div class="action-grid">
               ${cards.map(([title, body]) => `<div class="action"><b>${title}</b><small>${body}</small></div>`).join("")}
@@ -2796,17 +2885,14 @@
       const list = [...state.stocks].sort((a, b) => b.score - a.score);
       document.getElementById("candidateCount").textContent = `${list.length}只`;
       document.getElementById("candidates").innerHTML = list.map(stock => {
-        const action = modeAdjustedAdvice(stock);
+        const plan = updateExecutionPlanEvents(stock, getExecutionPlan(stock));
+        const action = executionSignal(stock, plan);
         const stText = stock.stRiskLevel === "高"
           ? " 基本面风险高，优先排除。"
           : stock.stRiskLevel === "中"
             ? " 基本面有瑕疵，降低仓位。"
             : " ST风险低。";
-        const reason = state.mode === "auction"
-          ? `${action[0]}：重点看开盘价${stock.open ?? "--"}能否守住，竞价高开${stock.openPct ?? "--"}%，承接${stock.openHold ?? "--"}%。`
-          : state.mode === "intraday"
-            ? `${action[0]}：优先看${stock.support1}附近承接，分时位置${stock.closePos ?? "--"}%，主力净额${fmtMoney(stock.net)}。`
-            : `${action[0]}：收盘位置${stock.closePos ?? "--"}%，明日观察${stock.pressure1}，隔夜风控${stock.stop}。`;
+        const reason = `${action[0]}：${action[1]}。固定低吸${plan.buyLow}-${plan.buyHigh}，突破${plan.breakout}，止盈${plan.target1}/${plan.target2}，止损${plan.stop}。`;
         return `
           <div class="candidate">
             <div class="candidate-top">
@@ -2835,6 +2921,9 @@
     }
 
     function bindToolInputs() {
+      document.querySelectorAll("[data-reset-plan]").forEach(button => {
+        button.addEventListener("click", () => resetExecutionPlan(button.dataset.resetPlan));
+      });
       document.querySelectorAll("[data-view-mode]").forEach(button => {
         button.addEventListener("click", () => {
           state.simpleMode = button.dataset.viewMode === "simple";
