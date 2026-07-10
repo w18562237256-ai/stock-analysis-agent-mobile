@@ -42,6 +42,10 @@
       display: none;
     }
 
+    body.locked .mobile-dock {
+      display: none;
+    }
+
     .access-gate {
       min-height: 100vh;
       display: none;
@@ -769,6 +773,37 @@
       line-height: 1.5;
     }
 
+    .quick-board,
+    .mobile-dock {
+      display: none;
+    }
+
+    .watch-quote {
+      display: grid;
+      grid-template-columns: auto auto;
+      align-items: center;
+      justify-content: end;
+      gap: 4px 8px;
+      min-width: 92px;
+      text-align: right;
+    }
+
+    .watch-price {
+      font-size: 16px;
+      font-weight: 900;
+    }
+
+    .watch-change {
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .watch-signal {
+      grid-column: 1 / -1;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
     @media (max-width: 1260px) {
       .topbar, .layout {
         grid-template-columns: 1fr;
@@ -825,7 +860,7 @@
       .app {
         width: 100%;
         max-width: 480px;
-        padding: max(10px, env(safe-area-inset-top)) 10px max(22px, env(safe-area-inset-bottom));
+        padding: max(10px, env(safe-area-inset-top)) 10px calc(84px + env(safe-area-inset-bottom));
         overflow-x: hidden;
       }
 
@@ -853,18 +888,22 @@
       }
 
       .sub {
-        font-size: 12px;
-        line-height: 1.45;
+        display: none;
       }
 
       .controls {
-        grid-template-columns: 1fr 92px 92px;
+        grid-template-columns: minmax(0, 1fr) 72px 72px;
         gap: 8px;
-        margin-top: 12px;
+        margin-top: 10px;
       }
 
       .controls label:first-child {
-        grid-column: 1 / -1;
+        grid-column: auto;
+      }
+
+      .controls label:nth-child(2),
+      #pullBtn {
+        display: none;
       }
 
       .controls .btn {
@@ -903,17 +942,26 @@
       }
 
       .metrics {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        display: flex;
+        overflow-x: auto;
         gap: 8px;
+        margin: 0 -10px 10px;
+        padding: 0 10px 2px;
+        scrollbar-width: none;
+        overscroll-behavior-x: contain;
       }
 
+      .metrics::-webkit-scrollbar { display: none; }
+
       .metric {
-        min-height: 66px;
-        padding: 11px;
+        flex: 0 0 112px;
+        min-height: 56px;
+        padding: 9px 10px;
       }
 
       .metric strong {
-        font-size: 21px;
+        margin-top: 6px;
+        font-size: 18px;
       }
 
       .layout {
@@ -936,23 +984,209 @@
       }
 
       .watchlist {
-        display: flex;
-        max-width: 100%;
-        overflow-x: auto;
-        overflow-y: hidden;
-        gap: 8px;
-        padding-bottom: 2px;
-        scrollbar-width: none;
-        overscroll-behavior-x: contain;
+        display: grid;
+        gap: 6px;
       }
 
-      .watchlist::-webkit-scrollbar {
-        display: none;
+      .layout > .panel:first-child .panel-head {
+        position: sticky;
+        top: 61px;
+        z-index: 3;
+        background: #121922;
       }
 
       .watch-btn {
-        flex: 0 0 190px;
+        width: 100%;
+        min-height: 62px;
+        padding: 9px 10px;
+        align-items: center;
+      }
+
+      .watch-remove {
+        grid-row: 1 / span 2;
+        grid-column: 3;
+        width: 30px;
+        height: 30px;
+        align-self: center;
+      }
+
+      .watch-quote {
+        grid-template-columns: auto auto auto;
+        min-width: 154px;
+      }
+
+      .watch-signal {
+        grid-column: 1 / 3;
+      }
+
+      .layout > .panel:first-child .disclaimer {
+        display: none;
+      }
+
+      .quick-board {
+        display: block;
+        border: 1px solid #2a3b50;
+        border-radius: 8px;
+        background: #111a25;
+        margin-bottom: 10px;
+        overflow: hidden;
+      }
+
+      .quick-head {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        align-items: start;
+        padding: 13px 14px 10px;
+      }
+
+      .quick-name {
+        font-size: 20px;
+        font-weight: 900;
+      }
+
+      .quick-price {
+        font-size: 28px;
+        line-height: 1;
+        font-weight: 900;
+        text-align: right;
+      }
+
+      .quick-change {
+        margin-top: 5px;
+        font-size: 14px;
+        font-weight: 900;
+        text-align: right;
+      }
+
+      .quick-signal-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 0 14px 10px;
+      }
+
+      .quick-signal {
+        font-size: 15px;
+        font-weight: 900;
+      }
+
+      .view-switch {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        padding: 3px;
+        border: 1px solid #2a3849;
+        border-radius: 6px;
+        background: #0b121b;
+      }
+
+      .view-switch button {
+        min-width: 48px;
+        min-height: 30px;
+        border: 0;
+        border-radius: 4px;
+        background: transparent;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .view-switch button.active {
+        background: #1b3852;
+        color: #e4f3ff;
+      }
+
+      .quick-levels {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        border-top: 1px solid #233040;
+        border-bottom: 1px solid #233040;
+      }
+
+      .quick-level {
+        padding: 10px 8px;
+        text-align: center;
+        border-right: 1px solid #233040;
+      }
+
+      .quick-level:last-child { border-right: 0; }
+
+      .quick-level span {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .quick-level b {
+        display: block;
+        margin-top: 5px;
+        font-size: 17px;
+      }
+
+      .quick-note {
+        padding: 10px 14px;
+        color: #c8d8e9;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .quick-note.danger { color: #ff9aa6; }
+      .quick-note.warn { color: #ffda91; }
+
+      .compact-plan {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+
+      .compact-plan .mini-card {
         min-height: 72px;
+      }
+
+      .compact-plan .mini-card:last-child {
+        grid-column: 1 / -1;
+      }
+
+      .mobile-dock {
+        position: fixed;
+        left: 50%;
+        bottom: 0;
+        z-index: 20;
+        width: min(100%, 480px);
+        transform: translateX(-50%);
+        display: grid;
+        grid-template-columns: 72px 1fr 72px;
+        gap: 8px;
+        padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+        border-top: 1px solid #2a3747;
+        background: rgba(11, 17, 24, .97);
+        box-shadow: 0 -10px 28px rgba(0, 0, 0, .34);
+      }
+
+      .dock-btn {
+        min-height: 46px;
+        border: 1px solid #2a3849;
+        border-radius: 7px;
+        background: #121c28;
+        color: var(--text);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .dock-btn.refreshing {
+        border-color: #2d82bd;
+        color: #8dccff;
+      }
+
+      .dock-btn svg {
+        width: 17px;
+        height: 17px;
       }
 
       .agent-card {
@@ -1042,7 +1276,7 @@
       }
 
       .candidates {
-        max-height: none;
+        max-height: 420px;
       }
 
       li, .candidate p, .horizon, .action small {
@@ -1127,6 +1361,18 @@
     </section>
   </main>
 
+  <nav class="mobile-dock" aria-label="移动看盘快捷操作">
+    <button class="dock-btn" id="prevStockBtn" title="上一只股票">
+      <i data-lucide="chevron-left"></i>上一只
+    </button>
+    <button class="dock-btn" id="quickRefreshBtn" title="立即刷新行情">
+      <i data-lucide="refresh-cw"></i><span id="refreshCountdown">刷新 30s</span>
+    </button>
+    <button class="dock-btn" id="nextStockBtn" title="下一只股票">
+      下一只<i data-lucide="chevron-right"></i>
+    </button>
+  </nav>
+
   <script>
     const ACCESS_CODE = "88888888";
     const ACCESS_KEY = "stockAgentAccessGranted";
@@ -1174,7 +1420,9 @@
       queryCodes: [],
       stocks: [],
       dataSource: "准备连接东财",
-      simpleMode: false
+      simpleMode: true,
+      refreshing: false,
+      refreshIn: 30
     };
 
     const modeCopy = {
@@ -1259,7 +1507,8 @@
     }
 
     function loadSimpleMode() {
-      state.simpleMode = localStorage.getItem("stockAgentSimpleMode") === "1";
+      const saved = localStorage.getItem("stockAgentSimpleMode");
+      state.simpleMode = saved === null ? true : saved === "1";
     }
 
     function saveSimpleMode() {
@@ -1820,7 +2069,10 @@
     }
 
     async function generate() {
+      if (state.refreshing) return;
       const codes = [...new Set([...(state.codes.length ? state.codes : defaultCodes()), ...state.queryCodes])];
+      state.refreshing = true;
+      state.refreshIn = 30;
       state.dataSource = "正在拉取东方财富行情...";
       render();
       try {
@@ -1833,6 +2085,8 @@
         state.dataSource = `东财拉取失败，已用模拟数据回退 · ${error.message}`;
       }
       if (!state.stocks.some(s => s.code === state.selected)) state.selected = state.stocks[0]?.code;
+      state.refreshing = false;
+      state.refreshIn = 30;
       render();
     }
 
@@ -1881,6 +2135,28 @@
       return `${Math.round(n)}万`;
     }
 
+    function updateRefreshControls() {
+      const text = document.getElementById("refreshCountdown");
+      const btn = document.getElementById("quickRefreshBtn");
+      if (!text || !btn) return;
+      text.textContent = state.refreshing ? "刷新中" : `刷新 ${state.refreshIn}s`;
+      btn.classList.toggle("refreshing", state.refreshing);
+    }
+
+    function scrollAnalysisIntoView() {
+      if (window.matchMedia("(max-width: 640px)").matches) {
+        document.getElementById("mainAnalysis")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+
+    function selectRelativeStock(offset) {
+      if (!state.stocks.length) return;
+      const index = Math.max(0, state.stocks.findIndex(stock => stock.code === state.selected));
+      state.selected = state.stocks[(index + offset + state.stocks.length) % state.stocks.length].code;
+      render();
+      scrollAnalysisIntoView();
+    }
+
     function renderMetrics() {
       const copy = modeCopy[state.mode];
       const heat = Math.round(state.stocks.reduce((sum, s) => sum + s.score, 0) / Math.max(1, state.stocks.length));
@@ -1897,22 +2173,29 @@
 
     function renderWatchlist() {
       document.getElementById("poolCount").textContent = `${state.stocks.length}只`;
-      document.getElementById("watchlist").innerHTML = state.stocks.map(stock => `
-        <button class="watch-btn ${stock.code === state.selected ? "active" : ""}" data-code="${stock.code}">
-          <span>
-            <b>${stock.name}</b>
-            <span class="code">${stock.code} · ${stock.board}${stock.industry ? ` · ${stock.industry}` : ""}${state.queryCodes.includes(stock.code) ? " · 临时查询" : ""}</span>
-          </span>
-          <span>
-            <span class="${stock.chg >= 0 ? "price-up" : "price-down"}">${stock.chg >= 0 ? "+" : ""}${stock.chg}%</span>
-            <span class="watch-remove" data-remove-code="${stock.code}" title="删除"><i data-lucide="x"></i></span>
-          </span>
-        </button>
-      `).join("");
+      document.getElementById("watchlist").innerHTML = state.stocks.map(stock => {
+        const action = modeAdjustedAdvice(stock);
+        const color = stock.chg >= 0 ? "price-up" : "price-down";
+        return `
+          <button class="watch-btn ${stock.code === state.selected ? "active" : ""}" data-code="${stock.code}">
+            <span>
+              <b>${stock.name}</b>
+              <span class="code">${stock.code}${stock.industry ? ` · ${stock.industry}` : ""}${state.queryCodes.includes(stock.code) ? " · 临时" : ""}</span>
+            </span>
+            <span class="watch-quote">
+              <span class="watch-price ${color}">${stock.price}</span>
+              <span class="watch-change ${color}">${stock.chg >= 0 ? "+" : ""}${stock.chg}%</span>
+              <span class="watch-signal">${action[0]} · ${stock.score}分</span>
+              <span class="watch-remove" data-remove-code="${stock.code}" title="删除"><i data-lucide="x"></i></span>
+            </span>
+          </button>
+        `;
+      }).join("");
       document.querySelectorAll(".watch-btn").forEach(btn => {
         btn.addEventListener("click", () => {
           state.selected = btn.dataset.code;
           render();
+          scrollAnalysisIntoView();
         });
       });
       document.querySelectorAll(".watch-remove").forEach(btn => {
@@ -2160,7 +2443,43 @@
       const scoreLabels = modeScoreLabels();
       const barLabels = modeBarLabels();
       const cards = actionCards(stock, buy, sell);
+      const triggers = tradeTriggers(stock);
+      const topAlert = pageAlerts(stock)[0];
+      const signalClass = cardClass === "risk" ? "sell" : cardClass === "warn" ? "wait" : "buy";
+      const compactView = state.simpleMode && window.matchMedia("(max-width: 640px)").matches;
       document.getElementById("mainAnalysis").innerHTML = `
+        <section class="quick-board">
+          <div class="quick-head">
+            <div>
+              <div class="quick-name">${stock.name}</div>
+              <div class="code">${stock.code} · ${stock.industry || stock.board} · ${modeCopy[state.mode].title}</div>
+            </div>
+            <div>
+              <div class="quick-price ${stock.chg >= 0 ? "price-up" : "price-down"}">${stock.price}</div>
+              <div class="quick-change ${stock.chg >= 0 ? "price-up" : "price-down"}">${stock.chg >= 0 ? "+" : ""}${stock.chg}%</div>
+            </div>
+          </div>
+          <div class="quick-signal-row">
+            <div class="quick-signal"><span class="badge ${signalClass}">${action[0]}</span> ${action[1]}</div>
+            <div class="view-switch" aria-label="看盘视图">
+              <button class="${state.simpleMode ? "active" : ""}" data-view-mode="simple">看盘</button>
+              <button class="${state.simpleMode ? "" : "active"}" data-view-mode="detail">深度</button>
+            </div>
+          </div>
+          <div class="quick-levels">
+            <div class="quick-level"><span>回踩支撑</span><b class="price-up">${buy}</b></div>
+            <div class="quick-level"><span>冲高压力</span><b class="price-down">${sell}</b></div>
+            <div class="quick-level"><span>计划止损</span><b>${stop}</b></div>
+          </div>
+          <div class="quick-note ${topAlert[0] || ""}">${topAlert[1]} 主力净额 ${fmtMoney(stock.net)}。</div>
+        </section>
+        ${compactView ? `
+          <section class="compact-plan">
+            <div class="mini-card"><b>低吸区间</b>${triggers.buyZone}<br><span class="code">${triggers.condition}</span></div>
+            <div class="mini-card"><b>冲高处理</b>${triggers.takeProfit} 附近<br><span class="code">不放量先减仓</span></div>
+            <div class="mini-card"><b>仓位与风控</b>${triggers.position} · 跌破 ${triggers.stop} 计划失效</div>
+          </section>
+        ` : `
         <article class="agent-card">
           <div class="stock-head">
             <div>
@@ -2214,6 +2533,7 @@
             </div>
           </div>
         </article>
+        `}
       `;
       lucide.createIcons();
     }
@@ -2261,6 +2581,13 @@
     }
 
     function bindToolInputs() {
+      document.querySelectorAll("[data-view-mode]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.simpleMode = button.dataset.viewMode === "simple";
+          saveSimpleMode();
+          render();
+        });
+      });
       document.querySelectorAll(".holding-cost-input, .holding-shares-input").forEach(input => {
         input.addEventListener("change", () => {
           const code = input.dataset.code;
@@ -2299,6 +2626,7 @@
       renderCandidates();
       bindTargetInputs();
       bindToolInputs();
+      updateRefreshControls();
       lucide.createIcons();
     }
 
@@ -2319,6 +2647,19 @@
     document.getElementById("pullBtn").addEventListener("click", () => {
       generate();
     });
+    document.getElementById("quickRefreshBtn").addEventListener("click", generate);
+    document.getElementById("prevStockBtn").addEventListener("click", () => selectRelativeStock(-1));
+    document.getElementById("nextStockBtn").addEventListener("click", () => selectRelativeStock(1));
+    setInterval(() => {
+      const editing = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName);
+      if (document.body.classList.contains("locked") || document.hidden || state.refreshing || editing) {
+        updateRefreshControls();
+        return;
+      }
+      state.refreshIn -= 1;
+      if (state.refreshIn <= 0) generate();
+      else updateRefreshControls();
+    }, 1000);
     state.codes = loadSavedCodes();
     loadSimpleMode();
     syncCodeInput("");
