@@ -597,6 +597,176 @@
     .confirm-item b.warn { color: var(--yellow); }
     .confirm-item b.danger { color: var(--green); }
 
+    .theory-panel {
+      margin-bottom: 14px;
+      border: 1px solid #3b3855;
+      border-radius: 8px;
+      background: #151724;
+      padding: 14px;
+    }
+
+    .theory-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .theory-head .section-title {
+      margin-bottom: 3px;
+    }
+
+    .theory-head > div > span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .theory-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .theory-item {
+      min-height: 98px;
+      padding: 11px;
+      border: 1px solid #2b3042;
+      border-left: 3px solid #7b8494;
+      border-radius: 6px;
+      background: #101520;
+    }
+
+    .theory-item.safe { border-left-color: var(--red); }
+    .theory-item.danger { border-left-color: var(--green); }
+    .theory-item.warn { border-left-color: var(--yellow); }
+
+    .theory-item span,
+    .theory-item small {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .theory-item b {
+      display: block;
+      margin: 7px 0 6px;
+      font-size: 15px;
+    }
+
+    .theory-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .theory-chip {
+      border-radius: 5px;
+      padding: 6px 8px;
+      background: #1a2230;
+      color: #c4d3e4;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .theory-chip.safe { color: #ff9ca8; background: rgba(255, 77, 99, .1); }
+    .theory-chip.danger { color: #7feaab; background: rgba(40, 215, 111, .1); }
+    .theory-chip.warn { color: #ffd583; background: rgba(255, 189, 62, .1); }
+
+    .spike-panel {
+      margin-bottom: 14px;
+      border: 1px solid #384357;
+      border-left: 3px solid var(--yellow);
+      border-radius: 8px;
+      background: #121923;
+      padding: 14px;
+    }
+
+    .spike-panel.safe { border-left-color: var(--red); }
+    .spike-panel.danger { border-left-color: var(--green); }
+
+    .spike-panel p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .spike-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .spike-head .section-title { margin-bottom: 3px; }
+    .spike-head > div > span { color: var(--muted); font-size: 12px; }
+
+    .spike-scores {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .spike-scores > div {
+      padding: 10px;
+      border: 1px solid #273448;
+      border-radius: 6px;
+      background: #0d151f;
+    }
+
+    .spike-scores span,
+    .spike-grid span,
+    .spike-grid small {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .spike-scores b {
+      display: block;
+      margin-top: 5px;
+      font-size: 24px;
+    }
+
+    .spike-scores .risk-value { color: var(--yellow); }
+
+    .spike-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border-top: 1px solid #263446;
+      border-left: 1px solid #263446;
+    }
+
+    .spike-grid > div {
+      min-height: 72px;
+      padding: 9px;
+      border-right: 1px solid #263446;
+      border-bottom: 1px solid #263446;
+    }
+
+    .spike-grid b {
+      display: block;
+      margin: 6px 0 4px;
+      font-size: 15px;
+    }
+
+    .spike-note {
+      margin-top: 9px;
+      padding: 8px 10px;
+      border-radius: 5px;
+      background: rgba(255, 189, 62, .08);
+      color: #e6cf9d;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .spike-note.safe { background: rgba(255, 77, 99, .08); color: #ffacb6; }
+    .spike-note.danger { background: rgba(40, 215, 111, .08); color: #84dca6; }
+
     .bars {
       display: grid;
       gap: 10px;
@@ -1494,6 +1664,37 @@
         font-size: 14px;
       }
 
+      .theory-panel {
+        margin-bottom: 10px;
+        padding: 12px;
+      }
+
+      .theory-head {
+        align-items: flex-start;
+        margin-bottom: 9px;
+      }
+
+      .theory-head > div > span {
+        display: none;
+      }
+
+      .theory-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .spike-panel {
+        margin-bottom: 10px;
+        padding: 12px;
+      }
+
+      .spike-head {
+        align-items: flex-start;
+      }
+
+      .spike-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
       .score-box {
         min-height: 72px;
         padding: 10px 8px;
@@ -1707,7 +1908,8 @@
       lastError: "",
       phaseName: "实时看盘",
       phaseNote: "自动识别竞价、盘中和尾盘阶段",
-      trendCache: {}
+      trendCache: {},
+      intradayCache: {}
     };
 
     function marketPhase(now = new Date()) {
@@ -1943,14 +2145,17 @@
       const holding = readHolding(stock.code);
       const hasHolding = Number(holding.cost) > 0 && Number(holding.shares) > 0;
       const confirmation = confirmationStatus(stock);
+      const spike = analyzeStraightLine(stock);
       if (stock.stRiskLevel === "高") return ["风险排除", "基本面/ST风险高", "不参与交易"];
       if (hasHolding) {
         if (stock.price <= plan.stop) return ["止损触发", `跌破固定止损 ${plan.stop}`, "优先执行风控"];
         if (stock.price >= plan.target2) return ["止盈触发", `到达第二目标 ${plan.target2}`, "分批兑现剩余仓位"];
         if (stock.price >= plan.target1) return ["减仓触发", `到达第一目标 ${plan.target1}`, "先兑现一部分"];
+        if (spike?.detected && spike.decayRisk >= 65) return ["回落减仓预警", `直线拉升后回落风险 ${spike.decayRisk}分`, "可先降低仓位保护利润"];
         return ["持有观察", `卖点 ${plan.target1}/${plan.target2} 未到`, `跌破 ${plan.stop} 执行止损`];
       }
       if (stock.price <= plan.stop) return ["计划失效", `跌破固定止损 ${plan.stop}`, "今日不再开仓"];
+      if (spike?.detected && spike.decayRisk >= 65) return ["直线诱多风险", `冲高后回落风险 ${spike.decayRisk}分`, "不追高，等待重新企稳"];
       if (stock.price >= plan.buyLow && stock.price <= plan.buyHigh) {
         if (stock.net >= 0 && stock.score >= 60 && confirmation.count >= 2) return ["低吸触发", `进入固定区且${confirmation.count}/4项指标确认`, "按计划小仓确认"];
         return ["到价未确认", `已进低吸区，仅${confirmation.count}/4项指标确认`, "等量能与资金改善"];
@@ -2012,6 +2217,200 @@
             <div class="confirm-item"><span>MA5 / MA10 / MA20</span><b class="${trend?.trendLabel === "多头排列" ? "safe" : trend?.trendLabel === "空头排列" ? "danger" : ""}">${trend ? `${trend.ma5} / ${trend.ma10} / ${trend.ma20}` : "加载中"}</b><small>${trend?.trendLabel || "正在获取30日日线"}</small></div>
             <div class="confirm-item"><span>RSI14 / 20日位置</span><b class="${trend?.rsi14 > 80 || trend?.rsi14 < 30 ? "warn" : ""}">${trend ? `${trend.rsi14} / ${trend.position20}%` : "加载中"}</b><small>${trend ? `20日区间 ${trend.low20}-${trend.high20}` : `60日涨跌 ${stock.change60d || 0}%`}</small></div>
           </div>
+        </section>
+      `;
+    }
+
+    function renderTheoryPanel(stock) {
+      const analysis = analyzeTheorySet(stock);
+      const compact = state.simpleMode && window.matchMedia("(max-width: 640px)").matches;
+      if (!analysis) {
+        return `
+          <section class="theory-panel">
+            <div class="theory-head">
+              <div class="section-title"><i data-lucide="network"></i>理论策略分析</div>
+              <span class="confirm-summary warn">正在加载120日日线</span>
+            </div>
+          </section>
+        `;
+      }
+      return `
+        <section class="theory-panel">
+          <div class="theory-head">
+            <div>
+              <div class="section-title"><i data-lucide="network"></i>理论策略分析</div>
+              <span>理论只做结构确认，不改变当天锁定的买卖价位</span>
+            </div>
+            <span class="confirm-summary ${analysis.cls}">${analysis.consensus} · ${analysis.totalScore > 0 ? "+" : ""}${analysis.totalScore}</span>
+          </div>
+          ${compact ? `
+            <div class="theory-chips">
+              ${analysis.items.map(item => `<span class="theory-chip ${item.score > 0 ? "safe" : item.score < 0 ? "danger" : "warn"}">${item.name.replace("（简化）", "")} · ${item.state}</span>`).join("")}
+            </div>
+          ` : `
+            <div class="theory-grid">
+              ${analysis.items.map(item => `
+                <div class="theory-item ${item.score > 0 ? "safe" : item.score < 0 ? "danger" : "warn"}">
+                  <span>${item.name}</span>
+                  <b>${item.state}</b>
+                  <small>${item.detail}</small>
+                </div>
+              `).join("")}
+            </div>
+          `}
+        </section>
+      `;
+    }
+
+    function estimatedLimitPct(stock) {
+      if (/(^|[^A-Z])\*?ST/i.test(stock.name || "")) return 5;
+      if (/^(300|301|688)/.test(stock.code)) return 20;
+      if (/^[48]/.test(stock.code)) return 30;
+      return 10;
+    }
+
+    function analyzeStraightLine(stock) {
+      const minuteData = stock.intradayData;
+      const bars = minuteData?.bars?.filter(bar => bar.close > 0) || [];
+      if (bars.length < 10) return null;
+      let best = null;
+      const windows = [3, 5, 8];
+      for (let end = 2; end < bars.length; end++) {
+        windows.forEach(windowSize => {
+          const start = end - windowSize + 1;
+          if (start < 0) return;
+          const section = bars.slice(start, end + 1);
+          const startPrice = section[0].open || section[0].close;
+          const endPrice = section.at(-1).close;
+          const risePct = startPrice ? ((endPrice / startPrice) - 1) * 100 : 0;
+          let path = 0;
+          let nonDown = 0;
+          for (let index = 1; index < section.length; index++) {
+            path += Math.abs(section[index].close - section[index - 1].close);
+            if (section[index].close >= section[index - 1].close) nonDown += 1;
+          }
+          const efficiency = path ? Math.abs(endPrice - startPrice) / path : 0;
+          const nonDownRatio = section.length > 1 ? nonDown / (section.length - 1) : 0;
+          const prior = bars.slice(Math.max(0, start - 20), start);
+          const priorVolume = average(prior.map(bar => bar.volume));
+          const sectionVolume = average(section.map(bar => bar.volume));
+          const volumeMultiple = priorVolume ? sectionVolume / priorVolume : 1;
+          const quality = risePct * efficiency * nonDownRatio * (1 + Math.min(3, volumeMultiple) * .12);
+          if (risePct >= 1.2 && efficiency >= .65 && nonDownRatio >= .65 && (!best || quality > best.quality)) {
+            best = { start, end, windowSize, startPrice, endPrice, risePct, efficiency, nonDownRatio, sectionVolume, volumeMultiple, quality };
+          }
+        });
+      }
+      if (!best) return { detected: false, conclusion: "未检测到明显直线拉升", detail: "近3/5/8分钟没有同时满足涨幅、方向效率和连续上行条件。" };
+
+      const after = bars.slice(best.end + 1);
+      const fromSpike = bars.slice(best.start);
+      const peak = Math.max(...fromSpike.map(bar => bar.high));
+      const current = bars.at(-1).close;
+      const pullbackPct = peak ? ((peak - current) / peak) * 100 : 0;
+      const retained = peak > best.startPrice ? ((current - best.startPrice) / (peak - best.startPrice)) * 100 : 0;
+      const postVolume = average(after.map(bar => bar.volume));
+      const postVolumeRatio = best.sectionVolume ? postVolume / best.sectionVolume : 0;
+      const avgPrice = bars.at(-1).avgPrice || current;
+      const limitPct = estimatedLimitPct(stock);
+      const previousClose = minuteData.preClose || stock.prevClose || current;
+      const limitPrice = +(previousClose * (1 + limitPct / 100)).toFixed(priceDigits(stock.price));
+      const distanceToLimit = current ? Math.max(0, ((limitPrice - current) / current) * 100) : 100;
+      const minutesSince = bars.length - 1 - best.end;
+
+      let sealScore = 20;
+      if (distanceToLimit <= .5) sealScore += 30;
+      else if (distanceToLimit <= 1.5) sealScore += 22;
+      else if (distanceToLimit <= 3) sealScore += 14;
+      else if (distanceToLimit <= 5) sealScore += 6;
+      if (retained >= 85) sealScore += 15;
+      else if (retained >= 65) sealScore += 8;
+      else sealScore -= 6;
+      if (pullbackPct <= .6) sealScore += 15;
+      else if (pullbackPct <= 1.2) sealScore += 8;
+      else if (pullbackPct > 2) sealScore -= 12;
+      if (best.volumeMultiple >= 1.5) sealScore += 10;
+      if (stock.mainNetRatio >= 3) sealScore += 10;
+      else if (stock.mainNetRatio > 0) sealScore += 5;
+      else sealScore -= 12;
+      if (stock.volumeRatio >= 1.3) sealScore += 5;
+      if (current >= avgPrice) sealScore += 5;
+      else sealScore -= 6;
+      sealScore = Math.max(0, Math.min(100, Math.round(sealScore)));
+
+      let decayRisk = 5;
+      if (pullbackPct > 2) decayRisk += 35;
+      else if (pullbackPct > 1) decayRisk += 20;
+      if (retained < 35) decayRisk += 35;
+      else if (retained < 60) decayRisk += 20;
+      if (stock.mainNetRatio < 0) decayRisk += 20;
+      if (current < avgPrice) decayRisk += 15;
+      if (after.length && postVolumeRatio > .8 && pullbackPct > .8) decayRisk += 10;
+      if (minutesSince > 15 && retained < 70) decayRisk += 10;
+      decayRisk = Math.max(0, Math.min(100, Math.round(decayRisk)));
+
+      let conclusion = "冲高震荡，等待二次确认";
+      let cls = "warn";
+      if (current >= limitPrice * .998) {
+        conclusion = "已到涨停附近，观察封单稳定性";
+        cls = "safe";
+      } else if (sealScore >= 70 && decayRisk < 45) {
+        conclusion = "封板延续条件较强";
+        cls = "safe";
+      } else if (decayRisk >= 60) {
+        conclusion = "直线拉升后回落风险高";
+        cls = "danger";
+      }
+      return {
+        detected: true,
+        conclusion,
+        cls,
+        sealScore,
+        decayRisk,
+        risePct: +best.risePct.toFixed(2),
+        duration: best.windowSize,
+        startTime: bars[best.start].time.slice(-5),
+        endTime: bars[best.end].time.slice(-5),
+        volumeMultiple: +best.volumeMultiple.toFixed(2),
+        pullbackPct: +pullbackPct.toFixed(2),
+        retained: Math.max(0, Math.min(120, Math.round(retained))),
+        distanceToLimit: +distanceToLimit.toFixed(2),
+        limitPrice,
+        avgPrice,
+        aboveAvg: current >= avgPrice,
+        minutesSince,
+        postVolumeRatio: +postVolumeRatio.toFixed(2)
+      };
+    }
+
+    function renderStraightLinePanel(stock) {
+      const analysis = analyzeStraightLine(stock);
+      if (!analysis) {
+        return `<section class="spike-panel"><div class="section-title"><i data-lucide="move-up-right"></i>直线拉升与封板判断</div><span class="code">正在获取当日分钟线...</span></section>`;
+      }
+      if (!analysis.detected) {
+        return `<section class="spike-panel"><div class="spike-head"><div class="section-title"><i data-lucide="move-up-right"></i>直线拉升与封板判断</div><span class="confirm-summary warn">未触发</span></div><p>${analysis.detail}</p></section>`;
+      }
+      return `
+        <section class="spike-panel ${analysis.cls}">
+          <div class="spike-head">
+            <div>
+              <div class="section-title"><i data-lucide="move-up-right"></i>直线拉升与封板判断</div>
+              <span>${analysis.startTime}-${analysis.endTime} · ${analysis.duration}分钟拉升${analysis.risePct}%</span>
+            </div>
+            <span class="confirm-summary ${analysis.cls}">${analysis.conclusion}</span>
+          </div>
+          <div class="spike-scores">
+            <div><span>封板条件分</span><b class="price-up">${analysis.sealScore}</b></div>
+            <div><span>回落风险分</span><b class="risk-value">${analysis.decayRisk}</b></div>
+          </div>
+          <div class="spike-grid">
+            <div><span>距估算涨停</span><b>${analysis.distanceToLimit}%</b><small>涨停价约 ${analysis.limitPrice}</small></div>
+            <div><span>冲高后回撤</span><b>${analysis.pullbackPct}%</b><small>涨幅保留 ${analysis.retained}%</small></div>
+            <div><span>拉升量能</span><b>${analysis.volumeMultiple}倍</b><small>相对拉升前均量</small></div>
+            <div><span>分时均价</span><b>${analysis.aboveAvg ? "均价上方" : "跌破均价"}</b><small>均价 ${analysis.avgPrice}</small></div>
+          </div>
+          <div class="spike-note ${analysis.cls}">${analysis.conclusion}。封板还需盘口封单持续，当前判断依据分钟量价与资金，不把一次直线拉升直接等同于涨停。</div>
         </section>
       `;
     }
@@ -2172,16 +2571,145 @@
       return 100 - 100 / (1 + relativeStrength);
     }
 
+    function standardDeviation(values) {
+      if (!values.length) return 0;
+      const mean = average(values);
+      return Math.sqrt(average(values.map(value => (value - mean) ** 2)));
+    }
+
+    function analyzeTheorySet(stock) {
+      const trend = stock.trendData;
+      const bars = trend?.bars || [];
+      if (bars.length < 60) return null;
+      const recent = bars.slice(-60);
+      const last = recent.at(-1);
+      const previous20 = recent.slice(-21, -1);
+      const previous10 = recent.slice(-11, -1);
+      const donchianHigh = Math.max(...previous20.map(item => item.high));
+      const donchianLow = Math.min(...previous20.map(item => item.low));
+      const exitLow = Math.min(...previous10.map(item => item.low));
+      const high60 = Math.max(...recent.map(item => item.high));
+      const low60 = Math.min(...recent.map(item => item.low));
+      const rangePosition = high60 > low60 ? ((stock.price - low60) / (high60 - low60)) * 100 : 50;
+      const volume5 = average(recent.slice(-5).map(item => item.volume));
+      const volume20 = average(recent.slice(-20).map(item => item.volume));
+      const spring = last.low < donchianLow && stock.price > donchianLow;
+      const upthrust = last.high > donchianHigh && stock.price < donchianHigh;
+
+      const rawPivots = [];
+      for (let index = 2; index < bars.length - 2; index++) {
+        const item = bars[index];
+        const left1 = bars[index - 1];
+        const left2 = bars[index - 2];
+        const right1 = bars[index + 1];
+        const right2 = bars[index + 2];
+        if (item.high > left1.high && item.high > left2.high && item.high >= right1.high && item.high >= right2.high) {
+          rawPivots.push({ type: "top", index, price: item.high });
+        } else if (item.low < left1.low && item.low < left2.low && item.low <= right1.low && item.low <= right2.low) {
+          rawPivots.push({ type: "bottom", index, price: item.low });
+        }
+      }
+      const pivots = [];
+      rawPivots.forEach(pivot => {
+        const previous = pivots.at(-1);
+        if (!previous || previous.type !== pivot.type) {
+          pivots.push(pivot);
+        } else if ((pivot.type === "top" && pivot.price > previous.price) || (pivot.type === "bottom" && pivot.price < previous.price)) {
+          pivots[pivots.length - 1] = pivot;
+        }
+      });
+      const lastPivots = pivots.slice(-4);
+      let centerLow = 0;
+      let centerHigh = 0;
+      if (lastPivots.length === 4) {
+        const segments = lastPivots.slice(1).map((pivot, index) => {
+          const previous = lastPivots[index];
+          return { low: Math.min(previous.price, pivot.price), high: Math.max(previous.price, pivot.price) };
+        });
+        centerLow = Math.max(...segments.map(segment => segment.low));
+        centerHigh = Math.min(...segments.map(segment => segment.high));
+        if (centerLow > centerHigh) centerLow = centerHigh = 0;
+      }
+      const bottoms = pivots.filter(pivot => pivot.type === "bottom").slice(-2);
+      let chanState = "结构未充分";
+      let chanScore = 0;
+      if (centerHigh) {
+        if (stock.price > centerHigh && bottoms.length === 2 && bottoms[1].price > bottoms[0].price) {
+          chanState = "中枢上方 · 类三买观察";
+          chanScore = 1;
+        } else if (stock.price > centerHigh) {
+          chanState = "向上离开中枢";
+          chanScore = 1;
+        } else if (stock.price < centerLow) {
+          chanState = "跌破中枢";
+          chanScore = -1;
+        } else {
+          chanState = "中枢震荡";
+        }
+      } else if (pivots.at(-1)?.type === "bottom") {
+        chanState = "底分型后上行观察";
+        chanScore = 1;
+      } else if (pivots.at(-1)?.type === "top") {
+        chanState = "顶分型后回落观察";
+        chanScore = -1;
+      }
+
+      let wyckoffState = "区间震荡";
+      let wyckoffDetail = `60日位置${Math.round(rangePosition)}%，量能比${volume20 ? (volume5 / volume20).toFixed(2) : "--"}`;
+      let wyckoffScore = 0;
+      if (spring) {
+        wyckoffState = "Spring回收观察";
+        wyckoffDetail = `跌破前20日低点${donchianLow}后收回，等待量价确认`;
+        wyckoffScore = 1;
+      } else if (upthrust) {
+        wyckoffState = "Upthrust派发风险";
+        wyckoffDetail = `上破前20日高点${donchianHigh}后回落`;
+        wyckoffScore = -1;
+      } else if (trend.ma20 > trend.ma60 && rangePosition >= 55) {
+        wyckoffState = "Markup拉升阶段";
+        wyckoffScore = 1;
+      } else if (trend.ma20 < trend.ma60 && rangePosition <= 45) {
+        wyckoffState = "Markdown下跌阶段";
+        wyckoffScore = -1;
+      } else if (rangePosition <= 35) {
+        wyckoffState = "Accumulation吸筹观察";
+        wyckoffScore = volume5 <= volume20 * 1.2 ? 1 : 0;
+      } else if (rangePosition >= 70 && volume5 > volume20 * 1.15) {
+        wyckoffState = "Distribution派发观察";
+        wyckoffScore = -1;
+      }
+
+      const trendScore = stock.price > trend.ma20 && trend.ma20 > trend.ma60 ? 1 : stock.price < trend.ma20 && trend.ma20 < trend.ma60 ? -1 : 0;
+      const turtleScore = stock.price >= donchianHigh ? 1 : stock.price <= exitLow ? -1 : 0;
+      const bollScore = stock.price <= trend.bollLower && trend.rsi14 < 35 ? 1 : stock.price >= trend.bollUpper && trend.rsi14 > 70 ? -1 : 0;
+      const items = [
+        { name: "缠论结构（简化）", state: chanState, detail: centerHigh ? `中枢约 ${centerLow.toFixed(priceDigits(stock.price))}-${centerHigh.toFixed(priceDigits(stock.price))}` : `最近识别${pivots.length}个有效分型`, score: chanScore },
+        { name: "威科夫量价", state: wyckoffState, detail: wyckoffDetail, score: wyckoffScore },
+        { name: "趋势跟随", state: trendScore > 0 ? "多头趋势" : trendScore < 0 ? "空头趋势" : "趋势不明确", detail: `MA20 ${trend.ma20} / MA60 ${trend.ma60}，ATR14 ${trend.atr14}%`, score: trendScore },
+        { name: "海龟突破", state: turtleScore > 0 ? "20日突破" : turtleScore < 0 ? "10日退出触发" : "通道内等待", detail: `突破 ${donchianHigh.toFixed(priceDigits(stock.price))} / 退出 ${exitLow.toFixed(priceDigits(stock.price))}`, score: turtleScore },
+        { name: "布林带 + RSI", state: bollScore > 0 ? "超卖回归观察" : bollScore < 0 ? "超买回落风险" : trend.bollWidth < 10 ? "波动收缩" : "中性区间", detail: `下${trend.bollLower} / 中${trend.ma20} / 上${trend.bollUpper}，RSI ${trend.rsi14}`, score: bollScore }
+      ];
+      const totalScore = items.reduce((sum, item) => sum + item.score, 0);
+      return {
+        items,
+        totalScore,
+        consensus: totalScore >= 2 ? "多理论偏多共振" : totalScore <= -2 ? "多理论偏空共振" : "理论信号分化",
+        cls: totalScore >= 2 ? "safe" : totalScore <= -2 ? "danger" : "warn"
+      };
+    }
+
     async function fetchDailyTrend(stock) {
       const fields1 = "f1,f2,f3,f4,f5,f6";
       const fields2 = "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61";
-      const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${marketPrefix(stock.code)}.${stock.code}&klt=101&fqt=1&lmt=30&end=20500101&fields1=${fields1}&fields2=${fields2}`;
+      const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${marketPrefix(stock.code)}.${stock.code}&klt=101&fqt=1&lmt=120&end=20500101&fields1=${fields1}&fields2=${fields2}`;
       const response = await eastmoneyJsonp(url, 8000);
       const rows = response?.data?.klines || [];
-      if (rows.length < 20) throw new Error("日线数据不足");
+      if (rows.length < 60) throw new Error("日线数据不足");
       const parsed = rows.map(row => {
         const parts = row.split(",");
         return {
+          date: parts[0],
+          open: asNumber(parts[1]),
           close: asNumber(parts[2]),
           high: asNumber(parts[3]),
           low: asNumber(parts[4]),
@@ -2197,15 +2725,32 @@
       const ma5 = +average(closes.slice(-5)).toFixed(digits);
       const ma10 = +average(closes.slice(-10)).toFixed(digits);
       const ma20 = +average(closes.slice(-20)).toFixed(digits);
+      const ma60 = +average(closes.slice(-60)).toFixed(digits);
+      const trueRanges = parsed.slice(-14).map((item, index, items) => {
+        const sourceIndex = parsed.length - 14 + index;
+        const previousClose = sourceIndex > 0 ? parsed[sourceIndex - 1].close : item.close;
+        return Math.max(item.high - item.low, Math.abs(item.high - previousClose), Math.abs(item.low - previousClose));
+      });
+      const atrValue = average(trueRanges);
+      const bollStd = standardDeviation(closes.slice(-20));
+      const bollUpper = +(ma20 + bollStd * 2).toFixed(digits);
+      const bollLower = +(ma20 - bollStd * 2).toFixed(digits);
+      const bollWidth = ma20 ? ((bollUpper - bollLower) / ma20) * 100 : 0;
       return {
         fetchedAt: Date.now(),
         ma5,
         ma10,
         ma20,
+        ma60,
         rsi14: +rsi14(closes).toFixed(1),
+        atr14: stock.price ? +((atrValue / stock.price) * 100).toFixed(1) : 0,
+        bollUpper,
+        bollLower,
+        bollWidth: +bollWidth.toFixed(1),
         high20: +high20.toFixed(digits),
         low20: +low20.toFixed(digits),
         position20: Math.max(0, Math.min(100, Math.round(position20))),
+        bars: parsed,
         trendLabel: stock.price >= ma5 && ma5 >= ma10 && ma10 >= ma20
           ? "多头排列"
           : stock.price <= ma5 && ma5 <= ma10 && ma10 <= ma20
@@ -2222,15 +2767,52 @@
       return data;
     }
 
-    async function attachTrendData(code) {
+    async function fetchIntradayData(stock) {
+      const fields1 = "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13";
+      const fields2 = "f51,f52,f53,f54,f55,f56,f57,f58";
+      const url = `https://push2his.eastmoney.com/api/qt/stock/trends2/get?secid=${marketPrefix(stock.code)}.${stock.code}&fields1=${fields1}&fields2=${fields2}&ndays=1&iscr=0`;
+      const response = await eastmoneyJsonp(url, 8000);
+      const rows = response?.data?.trends || [];
+      if (!rows.length) throw new Error("分钟行情不足");
+      return {
+        fetchedAt: Date.now(),
+        preClose: asNumber(response?.data?.preClose, stock.prevClose),
+        bars: rows.map(row => {
+          const parts = row.split(",");
+          return {
+            time: parts[0],
+            open: asNumber(parts[1]),
+            close: asNumber(parts[2]),
+            high: asNumber(parts[3]),
+            low: asNumber(parts[4]),
+            volume: asNumber(parts[5]),
+            amount: asNumber(parts[6]),
+            avgPrice: asNumber(parts[7])
+          };
+        })
+      };
+    }
+
+    async function getIntradayData(stock) {
+      const cached = state.intradayCache[stock.code];
+      if (cached && Date.now() - cached.fetchedAt < 15 * 1000) return cached;
+      const data = await fetchIntradayData(stock);
+      state.intradayCache[stock.code] = data;
+      return data;
+    }
+
+    async function attachMarketContext(code) {
       const stock = state.stocks.find(item => item.code === code);
       if (!stock) return;
-      try {
-        stock.trendData = await getTrendData(stock);
-        if (state.selected === code) render();
-      } catch (error) {
-        console.warn("日线指标加载失败", error);
-      }
+      const [trendResult, intradayResult] = await Promise.allSettled([
+        getTrendData(stock),
+        getIntradayData(stock)
+      ]);
+      if (trendResult.status === "fulfilled") stock.trendData = trendResult.value;
+      else console.warn("日线指标加载失败", trendResult.reason);
+      if (intradayResult.status === "fulfilled") stock.intradayData = intradayResult.value;
+      else console.warn("分钟行情加载失败", intradayResult.reason);
+      if (state.selected === code) render();
     }
 
     function quoteToStock(row, index) {
@@ -2682,11 +3264,14 @@
       if (!state.stocks.some(s => s.code === state.selected)) state.selected = state.stocks[0]?.code;
       const selectedStock = state.stocks.find(stock => stock.code === state.selected);
       if (selectedStock?.source === "东方财富") {
-        try {
-          selectedStock.trendData = await getTrendData(selectedStock);
-        } catch (error) {
-          console.warn("日线指标加载失败", error);
-        }
+        const [trendResult, intradayResult] = await Promise.allSettled([
+          getTrendData(selectedStock),
+          getIntradayData(selectedStock)
+        ]);
+        if (trendResult.status === "fulfilled") selectedStock.trendData = trendResult.value;
+        else console.warn("日线指标加载失败", trendResult.reason);
+        if (intradayResult.status === "fulfilled") selectedStock.intradayData = intradayResult.value;
+        else console.warn("分钟行情加载失败", intradayResult.reason);
       }
       state.refreshing = false;
       state.refreshIn = 20;
@@ -2802,7 +3387,7 @@
       const index = Math.max(0, state.stocks.findIndex(stock => stock.code === state.selected));
       state.selected = state.stocks[(index + offset + state.stocks.length) % state.stocks.length].code;
       render();
-      attachTrendData(state.selected);
+      attachMarketContext(state.selected);
       scrollAnalysisIntoView();
     }
 
@@ -2844,7 +3429,7 @@
         btn.addEventListener("click", () => {
           state.selected = btn.dataset.code;
           render();
-          attachTrendData(state.selected);
+          attachMarketContext(state.selected);
           scrollAnalysisIntoView();
         });
       });
@@ -2963,7 +3548,10 @@
     function pageAlerts(stock) {
       const plan = updateExecutionPlanEvents(stock, getExecutionPlan(stock));
       const signal = executionSignal(stock, plan);
+      const spike = analyzeStraightLine(stock);
       const alerts = [];
+      if (spike?.detected && spike.decayRisk >= 60) alerts.push(["danger", `${spike.conclusion}：回落风险${spike.decayRisk}分，封板条件${spike.sealScore}分。`]);
+      else if (spike?.detected && spike.sealScore >= 70) alerts.push(["", `${spike.conclusion}：封板条件${spike.sealScore}分，仍需观察封单。`]);
       if (stock.stRiskLevel === "高") alerts.push(["danger", "基本面/ST风险高：优先排除，不参与短线博弈。"]);
       if (signal[0].includes("止损") || signal[0].includes("失效")) alerts.push(["danger", `${signal[0]}：${signal[1]}。`]);
       if (signal[0].includes("止盈") || signal[0].includes("减仓")) alerts.push(["warn", `${signal[0]}：${signal[1]}。`]);
@@ -3065,6 +3653,8 @@
           <div class="quick-note ${topAlert[0] || ""}">${topAlert[1]} 主力净额 ${fmtMoney(stock.net)}。</div>
         </section>
         ${renderConfirmationPanel(stock)}
+        ${renderStraightLinePanel(stock)}
+        ${renderTheoryPanel(stock)}
         ${compactView ? `
           <section class="compact-plan">
             <div class="mini-card"><b>${triggers.signal[0]}</b>${triggers.signal[1]}<br><span class="code">${triggers.signal[2]}</span></div>
