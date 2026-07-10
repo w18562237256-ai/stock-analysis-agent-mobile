@@ -1,0 +1,2329 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1118" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="股票Agent" />
+  <title>股票分析 Agent 手机版</title>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1118;
+      --panel: #121922;
+      --panel-2: #151f2c;
+      --panel-3: #0f1721;
+      --line: #263242;
+      --muted: #8ea0b5;
+      --text: #eaf2ff;
+      --green: #28d76f;
+      --red: #ff4d63;
+      --blue: #43a5ff;
+      --yellow: #ffbd3e;
+      --violet: #8b7bff;
+      --shadow: 0 16px 44px rgba(0, 0, 0, .32);
+      font-family: Inter, "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 15% 0%, rgba(67, 165, 255, .11), transparent 28%),
+        linear-gradient(135deg, #081018 0%, #0d121a 48%, #101820 100%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    body.locked .app {
+      display: none;
+    }
+
+    .access-gate {
+      min-height: 100vh;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(67, 165, 255, .16), transparent 30%),
+        #0b1118;
+    }
+
+    body.locked .access-gate {
+      display: flex;
+    }
+
+    .gate-card {
+      width: min(420px, 100%);
+      border: 1px solid #263242;
+      border-radius: 8px;
+      background: #121922;
+      box-shadow: 0 16px 44px rgba(0, 0, 0, .32);
+      padding: 18px;
+    }
+
+    .gate-card h1 {
+      font-size: 22px;
+      margin-bottom: 8px;
+    }
+
+    .gate-card p {
+      color: var(--muted);
+      line-height: 1.6;
+      margin: 0 0 14px;
+      font-size: 13px;
+    }
+
+    .gate-error {
+      min-height: 20px;
+      color: var(--red);
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    button, input, textarea, select {
+      font: inherit;
+    }
+
+    .app {
+      width: min(1840px, calc(100vw - 28px));
+      margin: 0 auto;
+      padding: 18px 0 24px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) minmax(580px, 1.65fr);
+      gap: 16px;
+      align-items: stretch;
+      border: 1px solid var(--line);
+      background: rgba(18, 25, 34, .88);
+      box-shadow: var(--shadow);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .logo {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #14345a, #112236);
+      color: #62b6ff;
+      border: 1px solid #24435f;
+      font-weight: 900;
+      font-size: 22px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(22px, 2vw, 30px);
+      letter-spacing: 0;
+    }
+
+    .sub {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 120px 180px 160px;
+      gap: 10px;
+      align-items: end;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    input, textarea, select {
+      width: 100%;
+      min-height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #0b121b;
+      color: var(--text);
+      padding: 10px 12px;
+      outline: none;
+    }
+
+    input:focus, textarea:focus, select:focus {
+      border-color: #3f8fd4;
+      box-shadow: 0 0 0 3px rgba(67, 165, 255, .14);
+    }
+
+    .btn {
+      min-height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #182536;
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn.primary {
+      border-color: #1f9c55;
+      background: linear-gradient(180deg, #18a756, #0f7e42);
+    }
+
+    .btn.ghost {
+      background: #0d141d;
+    }
+
+    .btn:hover {
+      filter: brightness(1.08);
+    }
+
+    .mode-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin: 14px 0;
+    }
+
+    .tab {
+      border: 1px solid var(--line);
+      background: rgba(18, 25, 34, .76);
+      color: var(--muted);
+      padding: 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-weight: 800;
+    }
+
+    .tab.active {
+      background: #122334;
+      border-color: #2b83c6;
+      color: #d8ecff;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .metric {
+      min-height: 78px;
+      border: 1px solid var(--line);
+      background: rgba(18, 25, 34, .82);
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 9px;
+      font-size: clamp(20px, 2vw, 27px);
+      line-height: 1;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 300px minmax(560px, 1fr) 360px;
+      gap: 14px;
+      align-items: start;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      background: rgba(18, 25, 34, .9);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .22);
+    }
+
+    .panel-head {
+      padding: 14px;
+      border-bottom: 1px solid #202b39;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .panel-head h2 {
+      margin: 0;
+      font-size: 17px;
+    }
+
+    .panel-body {
+      padding: 14px;
+    }
+
+    .watchlist {
+      display: grid;
+      gap: 8px;
+    }
+
+    .watch-btn {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      text-align: left;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #202b39;
+      background: #0f1721;
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    .watch-remove {
+      width: 28px;
+      height: 28px;
+      border: 1px solid #314054;
+      border-radius: 6px;
+      background: #141e2a;
+      color: #ff8794;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      align-self: start;
+    }
+
+    .watch-btn.active {
+      border-color: #2f90d6;
+      background: #132235;
+    }
+
+    .code {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+    .price-up { color: var(--red); }
+    .price-down { color: var(--green); }
+
+    .agent-card {
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(20, 28, 39, .96), rgba(13, 19, 28, .96));
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+
+    .stock-head {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      padding: 18px 20px;
+      border-bottom: 1px solid #202b39;
+    }
+
+    .stock-head h3 {
+      margin: 0;
+      font-size: 24px;
+    }
+
+    .big-price {
+      font-size: 34px;
+      font-weight: 900;
+      text-align: right;
+      line-height: 1;
+    }
+
+    .change {
+      margin-top: 8px;
+      text-align: right;
+      font-weight: 800;
+    }
+
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 12px 20px 4px;
+    }
+
+    .badge {
+      border-radius: 5px;
+      padding: 5px 8px;
+      font-size: 12px;
+      font-weight: 900;
+      background: #16202d;
+      color: #b7c9dd;
+    }
+
+    .badge.buy { color: #80ffb1; background: rgba(40, 215, 111, .12); }
+    .badge.sell { color: #ff8794; background: rgba(255, 77, 99, .13); }
+    .badge.wait { color: #ffd583; background: rgba(255, 189, 62, .13); }
+    .badge.info { color: #80c6ff; background: rgba(67, 165, 255, .14); }
+
+    .grid2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      padding: 14px 20px;
+    }
+
+    .kv {
+      display: grid;
+      gap: 9px;
+    }
+
+    .kv div {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .kv b {
+      color: var(--text);
+      font-size: 15px;
+    }
+
+    .score-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      padding: 0 20px 16px;
+    }
+
+    .score-box {
+      background: #0d1620;
+      border: 1px solid #192635;
+      border-radius: 6px;
+      padding: 12px;
+    }
+
+    .score-box span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .score-box strong {
+      display: block;
+      margin-top: 6px;
+      font-size: 24px;
+    }
+
+    .bars {
+      display: grid;
+      gap: 10px;
+      padding: 0 20px 18px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 90px 1fr 42px;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .track {
+      height: 8px;
+      border-radius: 999px;
+      background: #222c38;
+      overflow: hidden;
+    }
+
+    .fill {
+      height: 100%;
+      border-radius: inherit;
+      width: 50%;
+      background: var(--blue);
+    }
+
+    .fill.red { background: var(--red); }
+    .fill.green { background: var(--green); }
+    .fill.yellow { background: var(--yellow); }
+
+    .explain, .strategy {
+      margin: 0 20px 18px;
+      border-radius: 8px;
+      border: 1px solid #273448;
+      background: #0d141d;
+      padding: 14px;
+    }
+
+    .fundamental {
+      margin: 0 20px 18px;
+      border-radius: 8px;
+      border: 1px solid #2a3a4d;
+      background: linear-gradient(180deg, rgba(67, 165, 255, .09), rgba(13, 20, 29, .98));
+      padding: 14px;
+    }
+
+    .fundamental-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin: 10px 0 12px;
+    }
+
+    .fund-item {
+      min-height: 70px;
+      border: 1px solid #1d2a3a;
+      border-radius: 6px;
+      background: rgba(10, 17, 24, .7);
+      padding: 10px;
+    }
+
+    .fund-item span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .fund-item b {
+      display: block;
+      margin-top: 7px;
+      font-size: 18px;
+    }
+
+    .risk-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 8px 0 10px;
+    }
+
+    .risk-tag {
+      border-radius: 5px;
+      padding: 6px 8px;
+      font-size: 12px;
+      font-weight: 900;
+      color: #bee0ff;
+      background: rgba(67, 165, 255, .12);
+    }
+
+    .risk-tag.safe { color: #80ffb1; background: rgba(40, 215, 111, .12); }
+    .risk-tag.warn { color: #ffd583; background: rgba(255, 189, 62, .14); }
+    .risk-tag.danger { color: #ff8794; background: rgba(255, 77, 99, .14); }
+
+    .horizon-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .horizon {
+      border: 1px solid #1d2a3a;
+      border-radius: 6px;
+      background: rgba(10, 17, 24, .7);
+      padding: 10px;
+      line-height: 1.5;
+    }
+
+    .horizon b {
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    .target-box {
+      margin-top: 12px;
+      border: 1px solid #25435d;
+      border-radius: 8px;
+      background: rgba(67, 165, 255, .08);
+      padding: 12px;
+    }
+
+    .target-inputs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin: 10px 0;
+    }
+
+    .target-inputs label {
+      font-size: 12px;
+    }
+
+    .target-inputs input {
+      min-height: 38px;
+    }
+
+    .target-result {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .target-result .fund-item {
+      min-height: 62px;
+    }
+
+    .tool-panel {
+      margin: 0 20px 18px;
+      border: 1px solid #273448;
+      border-radius: 8px;
+      background: #0d141d;
+      padding: 14px;
+    }
+
+    .tool-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .mini-card {
+      border: 1px solid #1d2a3a;
+      border-radius: 6px;
+      background: rgba(10, 17, 24, .7);
+      padding: 10px;
+      line-height: 1.5;
+    }
+
+    .mini-card b {
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    .switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 10px 0;
+    }
+
+    .switch-row input[type="checkbox"] {
+      width: 42px;
+      min-height: 22px;
+    }
+
+    .alert-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .alert-item {
+      border-left: 3px solid #43a5ff;
+      background: rgba(67, 165, 255, .08);
+      padding: 8px 10px;
+      border-radius: 5px;
+      line-height: 1.45;
+      font-size: 13px;
+    }
+
+    .alert-item.warn { border-left-color: var(--yellow); background: rgba(255, 189, 62, .1); }
+    .alert-item.danger { border-left-color: var(--red); background: rgba(255, 77, 99, .1); }
+
+    .strategy {
+      border-color: #1fa45a;
+      background: linear-gradient(180deg, rgba(31, 164, 90, .12), rgba(16, 21, 31, .98));
+    }
+
+    .strategy.warn {
+      border-color: #d4a126;
+      background: linear-gradient(180deg, rgba(255, 189, 62, .14), rgba(16, 21, 31, .98));
+    }
+
+    .strategy.risk {
+      border-color: #d64255;
+      background: linear-gradient(180deg, rgba(255, 77, 99, .13), rgba(16, 21, 31, .98));
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 900;
+      margin-bottom: 10px;
+      color: #dff0ff;
+    }
+
+    ol {
+      margin: 0;
+      padding-left: 22px;
+    }
+
+    li {
+      padding: 7px 0;
+      border-bottom: 1px solid #1e2a38;
+      line-height: 1.55;
+    }
+
+    li:last-child {
+      border-bottom: 0;
+    }
+
+    .action-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .action {
+      background: rgba(10, 17, 24, .72);
+      border: 1px solid #1d2a3a;
+      border-radius: 6px;
+      padding: 10px;
+      text-align: center;
+      min-height: 86px;
+    }
+
+    .action b {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .action small {
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .candidates {
+      max-height: 604px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .candidate {
+      border-bottom: 1px solid #202b39;
+      padding: 12px 10px;
+    }
+
+    .candidate:last-child { border-bottom: 0; }
+
+    .candidate-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-weight: 900;
+    }
+
+    .candidate p {
+      margin: 7px 0 0;
+      color: #bfd0e3;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .score-pill {
+      color: #55b7ff;
+      font-weight: 900;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 104px;
+      line-height: 1.5;
+    }
+
+    .chat-log {
+      display: grid;
+      gap: 10px;
+    }
+
+    .chat-bubble {
+      background: #0d141d;
+      border: 1px solid #202d3d;
+      border-radius: 8px;
+      padding: 12px;
+      line-height: 1.55;
+      color: #d8e8fa;
+    }
+
+    .chat-bubble strong {
+      color: #76c4ff;
+    }
+
+    .disclaimer {
+      margin-top: 14px;
+      color: #75879b;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 1260px) {
+      .topbar, .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .controls {
+        grid-template-columns: 1fr 120px 1fr 140px;
+      }
+
+      .metrics {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    @media (max-width: 760px) {
+      .app {
+        width: min(100vw - 16px, 680px);
+        padding-top: 8px;
+      }
+
+      .topbar, .controls, .metrics, .grid2, .score-grid, .action-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .fundamental-grid, .horizon-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .mode-tabs {
+        grid-template-columns: 1fr;
+      }
+
+      .stock-head {
+        grid-template-columns: 1fr;
+      }
+
+      .big-price, .change {
+        text-align: left;
+      }
+
+      .bar-row {
+        grid-template-columns: 74px 1fr 34px;
+      }
+    }
+
+    /* Mobile-first polish for WeChat browser sharing. */
+    @media (max-width: 640px) {
+      body {
+        background: #0b1118;
+        -webkit-text-size-adjust: 100%;
+        overflow-x: hidden;
+      }
+
+      .app {
+        width: 100%;
+        max-width: 480px;
+        padding: max(10px, env(safe-area-inset-top)) 10px max(22px, env(safe-area-inset-bottom));
+        overflow-x: hidden;
+      }
+
+      .topbar {
+        display: block;
+        border-radius: 0 0 8px 8px;
+        padding: 12px;
+        margin: -10px -10px 10px;
+        border-left: 0;
+        border-right: 0;
+      }
+
+      .brand {
+        gap: 10px;
+      }
+
+      .logo {
+        width: 38px;
+        height: 38px;
+        font-size: 18px;
+      }
+
+      h1 {
+        font-size: 22px;
+      }
+
+      .sub {
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .controls {
+        grid-template-columns: 1fr 92px 92px;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .controls label:first-child {
+        grid-column: 1 / -1;
+      }
+
+      .controls .btn {
+        min-height: 42px;
+        padding: 0 8px;
+        font-size: 13px;
+      }
+
+      input, textarea {
+        min-height: 42px;
+        font-size: 16px;
+      }
+
+      .mode-tabs {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+        margin: 0 -10px 10px;
+        padding: 8px 10px;
+        background: rgba(11, 17, 24, .95);
+        border-bottom: 1px solid #202b39;
+      }
+
+      .tab {
+        min-height: 44px;
+        padding: 7px 4px;
+        gap: 4px;
+        font-size: 13px;
+      }
+
+      .tab svg {
+        width: 15px;
+        height: 15px;
+      }
+
+      .metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .metric {
+        min-height: 66px;
+        padding: 11px;
+      }
+
+      .metric strong {
+        font-size: 21px;
+      }
+
+      .layout {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .panel {
+        border-radius: 8px;
+        max-width: 100%;
+      }
+
+      .panel-head {
+        padding: 12px;
+      }
+
+      .panel-body {
+        padding: 12px;
+      }
+
+      .watchlist {
+        display: flex;
+        max-width: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+        gap: 8px;
+        padding-bottom: 2px;
+        scrollbar-width: none;
+        overscroll-behavior-x: contain;
+      }
+
+      .watchlist::-webkit-scrollbar {
+        display: none;
+      }
+
+      .watch-btn {
+        flex: 0 0 190px;
+        min-height: 72px;
+      }
+
+      .agent-card {
+        border-radius: 8px;
+        max-width: 100%;
+      }
+
+      .stock-head {
+        padding: 14px;
+        gap: 10px;
+      }
+
+      .stock-head h3 {
+        font-size: 22px;
+      }
+
+      .big-price {
+        font-size: 31px;
+      }
+
+      .badges {
+        padding: 10px 14px 2px;
+      }
+
+      .grid2, .score-grid, .bars {
+        padding-left: 14px;
+        padding-right: 14px;
+      }
+
+      .score-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .score-box {
+        min-height: 72px;
+        padding: 10px 8px;
+      }
+
+      .score-box strong {
+        font-size: 23px;
+      }
+
+      .explain, .strategy, .fundamental {
+        margin-left: 14px;
+        margin-right: 14px;
+        padding: 12px;
+      }
+
+      .fundamental-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .fund-item {
+        min-height: 64px;
+      }
+
+      .fund-item b {
+        font-size: 16px;
+      }
+
+      .horizon-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .target-result {
+        grid-template-columns: 1fr;
+      }
+
+      .action-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .tool-panel {
+        margin-left: 14px;
+        margin-right: 14px;
+        padding: 12px;
+      }
+
+      .tool-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .action {
+        min-height: 96px;
+      }
+
+      .candidates {
+        max-height: none;
+      }
+
+      li, .candidate p, .horizon, .action small {
+        font-size: 13px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <section class="access-gate">
+    <div class="gate-card">
+      <h1>授权访问</h1>
+      <p>这个股票分析工具已开启访问门禁。请输入授权口令后使用。</p>
+      <input id="accessCodeInput" placeholder="输入授权口令" autocomplete="off" />
+      <button class="btn primary" id="accessCodeBtn" style="width:100%; margin-top:10px;">
+        <i data-lucide="lock-keyhole"></i>进入
+      </button>
+      <div class="gate-error" id="accessGateError"></div>
+    </div>
+  </section>
+
+  <main class="app">
+    <section class="topbar">
+      <div class="brand">
+        <div class="logo">A</div>
+        <div>
+          <h1>股票分析 Agent</h1>
+          <div class="sub" id="statusText">竞价、盘中、尾盘三种节奏独立分析</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <label>
+          添加代码
+          <input id="codesInput" value="603005,002185,002436,600360,603203,300476" />
+        </label>
+        <label>
+          可用资金
+          <input id="cashInput" value="5300" inputmode="numeric" />
+        </label>
+        <button class="btn primary" id="refreshBtn" title="重新生成分析">
+          <i data-lucide="plus"></i>添加
+        </button>
+        <button class="btn ghost" id="queryBtn" title="只查询，不加入监控池">
+          <i data-lucide="search"></i>查询
+        </button>
+        <button class="btn ghost" id="pullBtn" title="从东方财富刷新实时行情">
+          <i data-lucide="plug-zap"></i>东财行情
+        </button>
+      </div>
+    </section>
+
+    <div class="mode-tabs" role="tablist" aria-label="分析模式">
+      <button class="tab active" data-mode="auction"><i data-lucide="clock-3"></i>竞价分析</button>
+      <button class="tab" data-mode="intraday"><i data-lucide="activity"></i>盘中分析</button>
+      <button class="tab" data-mode="close"><i data-lucide="flag"></i>尾盘复盘</button>
+    </div>
+
+    <section class="metrics" id="metrics"></section>
+
+    <section class="layout">
+      <aside class="panel">
+        <div class="panel-head">
+          <h2>监控池</h2>
+          <span id="poolCount" class="code"></span>
+        </div>
+        <div class="panel-body">
+          <div class="watchlist" id="watchlist"></div>
+          <div class="disclaimer">排序优先看强度、资金、承接和风险。这里是分析辅助，不是买卖承诺。</div>
+        </div>
+      </aside>
+
+      <section id="mainAnalysis"></section>
+
+      <aside class="panel">
+        <div class="panel-head">
+          <h2>主板候选</h2>
+          <span id="candidateCount" class="code"></span>
+        </div>
+        <div class="panel-body candidates" id="candidates"></div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const ACCESS_CODE = "88888888";
+    const ACCESS_KEY = "stockAgentAccessGranted";
+
+    function setupAccessGate() {
+      const granted = localStorage.getItem(ACCESS_KEY) === "1";
+      document.body.classList.toggle("locked", !granted);
+      const input = document.getElementById("accessCodeInput");
+      const btn = document.getElementById("accessCodeBtn");
+      const error = document.getElementById("accessGateError");
+      function unlock() {
+        if ((input.value || "").trim() === ACCESS_CODE) {
+          localStorage.setItem(ACCESS_KEY, "1");
+          document.body.classList.remove("locked");
+          error.textContent = "";
+          generate();
+        } else {
+          error.textContent = "口令不对，请联系授权人。";
+        }
+      }
+      btn.addEventListener("click", unlock);
+      input.addEventListener("keydown", event => {
+        if (event.key === "Enter") unlock();
+      });
+    }
+
+    const stockNames = {
+      "603005": "晶方科技",
+      "002185": "华天科技",
+      "002436": "兴森科技",
+      "600360": "华微电子",
+      "603203": "快克智能",
+      "300476": "胜宏科技",
+      "000725": "京东方A",
+      "600552": "凯盛科技",
+      "002050": "三花智控",
+      "600888": "新疆众和",
+      "001287": "中电港"
+    };
+
+    const state = {
+      mode: "auction",
+      selected: "603005",
+      codes: [],
+      queryCodes: [],
+      stocks: [],
+      dataSource: "准备连接东财",
+      simpleMode: false
+    };
+
+    const modeCopy = {
+      auction: {
+        title: "竞价分析",
+        status: "集合竞价重点看高开强度、封单变化、竞价成交额和开盘承接",
+        actionName: "做T策略",
+        metrics: ["竞价热度", "高开占比", "强势家数", "竞价成交额", "更新时间"]
+      },
+      intraday: {
+        title: "盘中分析",
+        status: "盘中重点看量能延续、回踩承接、突破有效性和大单方向",
+        actionName: "盘中策略",
+        metrics: ["主板热度", "上涨占比", "涨停家数", "主板成交额", "更新时间"]
+      },
+      close: {
+        title: "尾盘复盘",
+        status: "尾盘重点看收盘位置、尾盘抢筹、次日预期和隔夜风险",
+        actionName: "明日预案",
+        metrics: ["尾盘热度", "红盘占比", "回封家数", "尾盘资金", "更新时间"]
+      }
+    };
+
+    function seededRandom(seed) {
+      let h = 2166136261;
+      for (let i = 0; i < seed.length; i++) {
+        h ^= seed.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return () => {
+        h += h << 13; h ^= h >>> 7;
+        h += h << 3; h ^= h >>> 17;
+        h += h << 5;
+        return ((h >>> 0) % 10000) / 10000;
+      };
+    }
+
+    function defaultCodes() {
+      return ["603005", "002185", "002436", "600360", "603203", "300476"];
+    }
+
+    function normalizeCodes(value) {
+      return [...new Set(String(value || "")
+        .split(/[,\s，、]+/)
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map(s => s.replace(/\D/g, ""))
+        .filter(s => /^\d{6}$/.test(s)))];
+    }
+
+    function loadSavedCodes() {
+      try {
+        const saved = JSON.parse(localStorage.getItem("stockAgentCodes") || "[]");
+        return Array.isArray(saved) && saved.length ? saved : defaultCodes();
+      } catch {
+        return defaultCodes();
+      }
+    }
+
+    function saveCodes() {
+      localStorage.setItem("stockAgentCodes", JSON.stringify(state.codes));
+    }
+
+    function syncCodeInput(value = "") {
+      document.getElementById("codesInput").value = value;
+    }
+
+    function holdingKey(code) {
+      return `stockAgentHolding:${code}`;
+    }
+
+    function readHolding(code) {
+      try {
+        return JSON.parse(localStorage.getItem(holdingKey(code)) || "{}");
+      } catch {
+        return {};
+      }
+    }
+
+    function saveHolding(code, holding) {
+      localStorage.setItem(holdingKey(code), JSON.stringify(holding));
+    }
+
+    function loadSimpleMode() {
+      state.simpleMode = localStorage.getItem("stockAgentSimpleMode") === "1";
+    }
+
+    function saveSimpleMode() {
+      localStorage.setItem("stockAgentSimpleMode", state.simpleMode ? "1" : "0");
+    }
+
+    function reviewHistoryKey() {
+      return "stockAgentReviewHistory";
+    }
+
+    function readReviewHistory() {
+      try {
+        return JSON.parse(localStorage.getItem(reviewHistoryKey()) || "[]");
+      } catch {
+        return [];
+      }
+    }
+
+    function saveReviewHistory(items) {
+      localStorage.setItem(reviewHistoryKey(), JSON.stringify(items.slice(0, 30)));
+    }
+
+    function appendReview(stock, action) {
+      const items = readReviewHistory();
+      const target = targetValuation(stock);
+      const item = {
+        id: `${Date.now()}-${stock.code}`,
+        time: new Date().toLocaleString("zh-CN", { hour12: false }),
+        ts: Date.now(),
+        code: stock.code,
+        name: stock.name,
+        mode: modeCopy[state.mode].title,
+        action: action[0],
+        price: stock.price,
+        score: stock.score,
+        support: stock.support1,
+        pressure: stock.pressure1,
+        stop: stock.stop,
+        targetPrice: target.targetPrice ? +target.targetPrice.toFixed(2) : 0
+      };
+      saveReviewHistory([item, ...items]);
+    }
+
+    function makeStock(code, index) {
+      const rand = seededRandom(`${code}-${state.mode}-${Date.now().toString().slice(0, 8)}`);
+      const base = 10 + rand() * 78 + index * 2.3;
+      const chg = state.mode === "auction"
+        ? (rand() * 10.8 - 1.4)
+        : state.mode === "intraday"
+          ? (rand() * 14 - 5.2)
+          : (rand() * 12 - 4.8);
+      const up = chg >= 0;
+      const auctionBoost = state.mode === "auction" ? 8 : 0;
+      const net = Math.round((rand() * 520000 - 120000) * (up ? 1 : -0.4));
+      const superOrder = Math.round(Math.abs(net) * (0.58 + rand()));
+      const score = Math.max(18, Math.min(99, Math.round(48 + chg * 4 + rand() * 24 + auctionBoost)));
+      const momentum = Math.max(5, Math.min(100, Math.round(score + rand() * 20 - 10)));
+      const liquidity = Math.max(10, Math.min(100, Math.round(44 + rand() * 56)));
+      const risk = Math.max(1, Math.min(100, Math.round(100 - score + rand() * 18)));
+      const price = +(base * (1 + chg / 100)).toFixed(2);
+      const support1 = +(price * (1 - (0.018 + rand() * 0.028))).toFixed(2);
+      const support2 = +(price * (1 - (0.052 + rand() * 0.035))).toFixed(2);
+      const pressure1 = +(price * (1 + (0.015 + rand() * 0.035))).toFixed(2);
+      const pressure2 = +(price * (1 + (0.052 + rand() * 0.05))).toFixed(2);
+      const confidence = Math.max(25, Math.min(98, Math.round(score * .72 + liquidity * .22 + rand() * 16)));
+      const trend = score >= 78 ? "强势吸筹" : score >= 62 ? "回踩低吸" : score >= 48 ? "观望等信号" : "风险出货";
+      return {
+        code,
+        name: stockNames[code] || `自选股${code.slice(-3)}`,
+        price,
+        chg: +chg.toFixed(2),
+        amount: +(18 + rand() * 92).toFixed(2),
+        support1,
+        support2,
+        pressure1,
+        pressure2,
+        stop: +(support2 * .985).toFixed(2),
+        score,
+        momentum,
+        liquidity,
+        risk,
+        confidence,
+        net,
+        superOrder,
+        trend,
+        board: code.startsWith("3") ? "创业板" : "主板",
+        concentration: score > 78 ? "高度集中" : score > 55 ? "中等集中" : "一般分散",
+        pe: +(35 + rand() * 130).toFixed(2),
+        peTtm: +(30 + rand() * 120).toFixed(2),
+        pb: +(1.2 + rand() * 8).toFixed(2),
+        totalMarketCap: Math.round((80 + rand() * 720) * 100000000),
+        floatMarketCap: Math.round((70 + rand() * 650) * 100000000),
+        stRiskLevel: "低",
+        stRiskReasons: ["名称未触发ST/退市标签", "价格与成交数据正常"]
+      };
+    }
+
+    function marketPrefix(code) {
+      if (code.startsWith("6") || code.startsWith("9")) return "1";
+      return "0";
+    }
+
+    function eastmoneyJsonp(url, timeout = 8000) {
+      return new Promise((resolve, reject) => {
+        const callback = `em_cb_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+        const script = document.createElement("script");
+        const timer = setTimeout(() => {
+          cleanup();
+          reject(new Error("东财接口响应超时"));
+        }, timeout);
+
+        function cleanup() {
+          clearTimeout(timer);
+          delete window[callback];
+          script.remove();
+        }
+
+        window[callback] = data => {
+          cleanup();
+          resolve(data);
+        };
+
+        script.onerror = () => {
+          cleanup();
+          reject(new Error("东财接口加载失败"));
+        };
+
+        const separator = url.includes("?") ? "&" : "?";
+        script.src = `${url}${separator}cb=${callback}&_=${Date.now()}`;
+        document.body.appendChild(script);
+      });
+    }
+
+    function asNumber(value, fallback = 0) {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : fallback;
+    }
+
+    function priceDigits(price) {
+      return Math.max(2, Math.min(3, String(price).split(".")[1]?.length || 2));
+    }
+
+    function quoteToStock(row, index) {
+      const code = row.f12;
+      const price = asNumber(row.f2);
+      const chg = asNumber(row.f3);
+      const open = asNumber(row.f17, price);
+      const prevClose = asNumber(row.f18, price);
+      const high = asNumber(row.f15, price);
+      const low = asNumber(row.f16, price);
+      const amount = +(asNumber(row.f6) / 100000000).toFixed(2);
+      const turnover = asNumber(row.f8);
+      const net = Math.round(asNumber(row.f62) / 10000);
+      const superOrder = Math.round(asNumber(row.f66) / 10000);
+      const industry = row.f100 || "未知行业";
+      const totalMarketCap = asNumber(row.f20);
+      const floatMarketCap = asNumber(row.f21);
+      const pe = asNumber(row.f9);
+      const peTtm = asNumber(row.f115, pe);
+      const pb = asNumber(row.f23);
+      const openPct = prevClose ? ((open - prevClose) / prevClose) * 100 : 0;
+      const intradayPos = high > low ? ((price - low) / (high - low)) * 100 : 50;
+      const closePos = intradayPos;
+      const openHold = open ? ((price - open) / open) * 100 : 0;
+      const moneyPower = Math.max(-20, Math.min(20, net / 3000));
+      const auctionBoost = state.mode === "auction" ? Math.max(-10, Math.min(16, openPct * 3)) : 0;
+      const closeBoost = state.mode === "close" ? Math.max(-8, Math.min(12, intradayPos / 9 - 4)) : 0;
+      const score = Math.max(12, Math.min(99, Math.round(52 + chg * 3.1 + moneyPower + turnover * .45 + auctionBoost + closeBoost)));
+      const momentum = Math.max(5, Math.min(100, Math.round(48 + chg * 4 + intradayPos * .32 + turnover * .35)));
+      const liquidity = Math.max(10, Math.min(100, Math.round(35 + Math.log10(Math.max(1, amount)) * 22 + turnover * .7)));
+      const risk = Math.max(1, Math.min(100, Math.round(100 - score + Math.max(0, -chg) * 6 + (net < 0 ? 12 : 0))));
+      const digits = priceDigits(price);
+      const support1 = +(Math.max(low, price * 0.97)).toFixed(digits);
+      const support2 = +(Math.max(0.01, Math.min(low, price * 0.94))).toFixed(digits);
+      const pressure1 = +(Math.max(high, price * 1.025)).toFixed(digits);
+      const pressure2 = +(Math.max(pressure1, price * 1.06)).toFixed(digits);
+      const confidence = Math.max(22, Math.min(98, Math.round(score * .68 + liquidity * .18 + (net > 0 ? 10 : 0))));
+
+      return {
+        code,
+        name: row.f14 || stockNames[code] || `自选股${code.slice(-3)}`,
+        price,
+        chg: +chg.toFixed(2),
+        amount,
+        support1,
+        support2,
+        pressure1,
+        pressure2,
+        stop: +(support2 * .985).toFixed(digits),
+        score,
+        momentum,
+        liquidity,
+        risk,
+        confidence,
+        net,
+        superOrder,
+        trend: score >= 78 ? "强势吸筹" : score >= 62 ? "回踩低吸" : score >= 48 ? "观望等信号" : "风险出货",
+        board: code.startsWith("3") ? "创业板" : code.startsWith("688") ? "科创板" : "主板",
+        concentration: score > 78 ? "高度集中" : score > 55 ? "中等集中" : "一般分散",
+        open,
+        openPct: +openPct.toFixed(2),
+        openHold: +openHold.toFixed(2),
+        high,
+        low,
+        closePos: Math.round(closePos),
+        prevClose,
+        turnover,
+        industry,
+        totalMarketCap,
+        floatMarketCap,
+        pe,
+        peTtm,
+        pb,
+        source: "东方财富"
+      };
+    }
+
+    function modeScore(stock) {
+      const money = Math.max(-20, Math.min(20, stock.net / 3000));
+      if (state.mode === "auction") {
+        return Math.max(12, Math.min(99, Math.round(
+          48 + (stock.openPct || 0) * 7 + (stock.openHold || 0) * 4 + money + (stock.turnover || 0) * .35
+        )));
+      }
+      if (state.mode === "intraday") {
+        return Math.max(12, Math.min(99, Math.round(
+          45 + stock.chg * 3.2 + (stock.closePos || 50) * .24 + money + (stock.turnover || 0) * .45
+        )));
+      }
+      return Math.max(12, Math.min(99, Math.round(
+        42 + stock.chg * 2.2 + (stock.closePos || 50) * .42 + money * .8 + (stock.turnover || 0) * .25
+      )));
+    }
+
+    function withModeScores(stocks) {
+      return stocks.map(stock => {
+        const score = modeScore(stock);
+        const risk = Math.max(1, Math.min(100, Math.round(100 - score + Math.max(0, -stock.chg) * 5 + (stock.net < 0 ? 10 : 0))));
+        const momentum = state.mode === "auction"
+          ? Math.max(5, Math.min(100, Math.round(50 + (stock.openPct || 0) * 8 + (stock.openHold || 0) * 5 + (stock.net > 0 ? 12 : -8))))
+          : Math.max(5, Math.min(100, Math.round(45 + stock.chg * 4 + (stock.closePos || 50) * .3 + (stock.turnover || 0) * .35)));
+        const confidence = Math.max(22, Math.min(98, Math.round(score * .7 + stock.liquidity * .16 + (stock.net > 0 ? 9 : 0))));
+        return {
+          ...stock,
+          score,
+          risk,
+          momentum,
+          confidence,
+          concentration: score > 78 ? "高度集中" : score > 55 ? "中等集中" : "一般分散",
+          trend: score >= 78 ? "强势吸筹" : score >= 62 ? "回踩低吸" : score >= 48 ? "观望等信号" : "风险出货",
+          ...fundamentalRisk(stock, score)
+        };
+      });
+    }
+
+    function fundamentalRisk(stock, score = stock.score) {
+      const name = stock.name || "";
+      const reasons = [];
+      let levelScore = 0;
+
+      if (/退市/.test(name)) {
+        levelScore += 100;
+        reasons.push("名称含退市标签");
+      }
+      if (/(^|[^A-Z])\*?ST/i.test(name)) {
+        levelScore += 80;
+        reasons.push("名称含ST或*ST标签");
+      }
+      if (!stock.price || stock.price <= 0 || !stock.amount) {
+        levelScore += 55;
+        reasons.push("价格或成交额异常，可能停牌/退市整理/无有效行情");
+      }
+      if (stock.totalMarketCap > 0 && stock.totalMarketCap < 3000000000) {
+        levelScore += 18;
+        reasons.push("总市值偏小，波动和壳风险更高");
+      }
+      if (stock.peTtm < 0 || stock.pe < 0) {
+        levelScore += 24;
+        reasons.push("市盈率为负，盈利质量需要核查");
+      }
+      if (stock.peTtm > 120 || stock.pe > 150) {
+        levelScore += 14;
+        reasons.push("估值偏高，需确认业绩兑现");
+      }
+      if (stock.pb > 12) {
+        levelScore += 10;
+        reasons.push("PB偏高，注意估值回落风险");
+      }
+
+      if (!reasons.length) reasons.push("未发现明显ST/退市名称风险");
+      if (levelScore < 80) {
+        reasons.push("质押、解禁、商誉、监管问询需结合公告继续核查");
+      }
+      const level = levelScore >= 80 ? "高" : levelScore >= 35 ? "中" : "低";
+      const health = Math.max(5, Math.min(99, Math.round(86 - levelScore * .55 + Math.min(10, score / 10))));
+      return {
+        stRiskLevel: level,
+        stRiskReasons: reasons,
+        fundamentalHealth: health
+      };
+    }
+
+    function fmtCap(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n) || n <= 0) return "--";
+      if (n >= 1000000000000) return `${(n / 1000000000000).toFixed(2)}万亿`;
+      return `${(n / 100000000).toFixed(2)}亿`;
+    }
+
+    function fmtRatio(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n) || n === 0) return "--";
+      return n.toFixed(2);
+    }
+
+    function targetKey(code) {
+      return `stockAgentTarget:${code}`;
+    }
+
+    function readTargetConfig(code) {
+      try {
+        return JSON.parse(localStorage.getItem(targetKey(code)) || "{}");
+      } catch {
+        return {};
+      }
+    }
+
+    function saveTargetConfig(code, config) {
+      localStorage.setItem(targetKey(code), JSON.stringify(config));
+    }
+
+    function inferredProfitYi(stock) {
+      if (stock.totalMarketCap > 0 && stock.peTtm > 0) {
+        return stock.totalMarketCap / stock.peTtm / 100000000;
+      }
+      if (stock.totalMarketCap > 0 && stock.pe > 0) {
+        return stock.totalMarketCap / stock.pe / 100000000;
+      }
+      return 0;
+    }
+
+    function defaultTargetPe(stock) {
+      const base = stock.peTtm > 0 ? stock.peTtm : stock.pe;
+      if (base > 0) return Math.max(12, Math.min(80, +(base * 0.85).toFixed(1)));
+      if (/半导体|芯片|人工智能|算力|机器人/.test(stock.industry || "")) return 45;
+      return 25;
+    }
+
+    function targetValuation(stock) {
+      const saved = readTargetConfig(stock.code);
+      const inferred = inferredProfitYi(stock);
+      const forecastProfit = Number.isFinite(Number(saved.profit)) && Number(saved.profit) > 0
+        ? Number(saved.profit)
+        : +(inferred * 1.15).toFixed(2);
+      const targetPe = Number.isFinite(Number(saved.pe)) && Number(saved.pe) > 0
+        ? Number(saved.pe)
+        : defaultTargetPe(stock);
+      const totalShares = stock.price > 0 && stock.totalMarketCap > 0
+        ? stock.totalMarketCap / stock.price
+        : 0;
+      const targetMarketCap = forecastProfit * targetPe * 100000000;
+      const targetPrice = totalShares > 0 ? targetMarketCap / totalShares : 0;
+      const upside = stock.price > 0 && targetPrice > 0 ? ((targetPrice / stock.price - 1) * 100) : 0;
+      const conservative = targetPrice * 0.85;
+      const optimistic = targetPrice * 1.18;
+      return {
+        saved,
+        inferred,
+        forecastProfit,
+        targetPe,
+        targetMarketCap,
+        targetPrice,
+        upside,
+        conservative,
+        optimistic
+      };
+    }
+
+    function renderTargetPanel(stock) {
+      const target = targetValuation(stock);
+      const sourceText = target.saved.profit || target.saved.pe
+        ? "使用你填写的研报假设"
+        : "未填写研报时，按当前TTM利润上浮15%估算";
+      const upsideClass = target.upside >= 0 ? "price-up" : "price-down";
+      return `
+        <div class="target-box">
+          <div class="section-title"><i data-lucide="crosshair"></i>研报利润目标价测算</div>
+          <div class="target-inputs">
+            <label>
+              研报预测净利润（亿元）
+              <input class="target-profit-input" data-code="${stock.code}" value="${target.saved.profit ?? ""}" placeholder="${target.forecastProfit || "--"}" inputmode="decimal" />
+            </label>
+            <label>
+              目标PE
+              <input class="target-pe-input" data-code="${stock.code}" value="${target.saved.pe ?? ""}" placeholder="${target.targetPe || "--"}" inputmode="decimal" />
+            </label>
+          </div>
+          <div class="target-result">
+            <div class="fund-item"><span>目标价</span><b class="${upsideClass}">${target.targetPrice ? target.targetPrice.toFixed(2) : "--"}</b></div>
+            <div class="fund-item"><span>空间</span><b class="${upsideClass}">${target.targetPrice ? `${target.upside.toFixed(1)}%` : "--"}</b></div>
+            <div class="fund-item"><span>目标市值</span><b>${fmtCap(target.targetMarketCap)}</b></div>
+          </div>
+          <ol style="margin-top:10px;">
+            <li>${sourceText}；当前反推TTM净利润约${target.inferred ? target.inferred.toFixed(2) : "--"}亿元。</li>
+            <li>保守目标价约${target.conservative ? target.conservative.toFixed(2) : "--"}，中性目标价约${target.targetPrice ? target.targetPrice.toFixed(2) : "--"}，乐观目标价约${target.optimistic ? target.optimistic.toFixed(2) : "--"}。</li>
+            <li>目标价只解决“值多少钱”的问题，买卖仍要结合竞价/盘中/尾盘信号和风险线。</li>
+          </ol>
+        </div>
+      `;
+    }
+
+    function renderDecisionTools(stock) {
+      const sector = sectorPulse(stock);
+      const trigger = tradeTriggers(stock);
+      const holding = holdingView(stock);
+      const alerts = pageAlerts(stock);
+      const history = readReviewHistory().slice(0, 5);
+      const stats = reviewStats(readReviewHistory());
+      const simpleText = state.simpleMode
+        ? `<div class="mini-card"><b>一句话</b><span>${stock.stRiskLevel === "高" ? "这只先别碰，风险标签太重。" : stock.score >= 75 ? `只等回踩${stock.support1}附近，不追高。` : "先观察，等资金和价格同时确认。"}</span></div>`
+        : "";
+      return `
+        <div class="tool-panel">
+          <div class="section-title"><i data-lucide="sliders-horizontal"></i>交易执行与监控</div>
+          <div class="switch-row">
+            <span>简单模式</span>
+            <input type="checkbox" id="simpleModeToggle" ${state.simpleMode ? "checked" : ""} />
+          </div>
+          <div class="tool-grid">
+            ${simpleText}
+            <div class="mini-card"><b>板块联动</b><span>${stock.industry || "--"}：${sector.strength}，池内${sector.count}只，红盘${sector.upCount}只，${sector.role}。</span></div>
+            <div class="mini-card"><b>买卖触发</b><span>买入区间 ${trigger.buyZone}；${trigger.noChase}；止损 ${trigger.stop}；仓位 ${trigger.position}。</span></div>
+            <div class="mini-card"><b>触发条件</b><span>${trigger.condition}；目标先看 ${trigger.takeProfit}。</span></div>
+          </div>
+          <div class="target-inputs">
+            <label>
+              持仓成本
+              <input class="holding-cost-input" data-code="${stock.code}" value="${holding.holding.cost ?? ""}" placeholder="${stock.price}" inputmode="decimal" />
+            </label>
+            <label>
+              持仓股数
+              <input class="holding-shares-input" data-code="${stock.code}" value="${holding.holding.shares ?? ""}" placeholder="100" inputmode="numeric" />
+            </label>
+          </div>
+          <div class="target-result">
+            <div class="fund-item"><span>浮盈浮亏</span><b class="${holding.profit >= 0 ? "price-up" : "price-down"}">${holding.shares ? `${Math.round(holding.profit)}元 / ${holding.profitPct.toFixed(1)}%` : "--"}</b></div>
+            <div class="fund-item"><span>计划风险</span><b>${holding.shares ? `${Math.round(holding.maxRisk)}元` : "--"}</b></div>
+            <div class="fund-item"><span>持仓处理</span><b>${holding.plan}</b></div>
+          </div>
+          <div class="alert-list">
+            ${alerts.map(([cls, text]) => `<div class="alert-item ${cls}">${text}</div>`).join("")}
+          </div>
+          <button class="btn ghost" id="recordReviewBtn" style="width:100%; margin-top:10px;"><i data-lucide="archive"></i>记录本次判断</button>
+          ${history.length ? `
+            <div class="mini-card" style="margin-top:10px;">
+              <b>复盘评分</b>
+              <span>已记录${stats.total}条，已出结果${stats.done}条，命中${stats.wins}条，胜率${stats.winRate}%。</span>
+            </div>
+            <div class="alert-list">
+              ${history.map(item => {
+                const scored = scoreReviewItem(item);
+                return `<div class="alert-item ${scored.cls === "danger" ? "danger" : scored.cls === "warn" ? "warn" : ""}">
+                  ${item.time} · ${item.name} · ${item.mode} · ${item.action}<br />
+                  记录${item.price}元，压力${item.pressure}，止损${item.stop} · ${scored.label}：${scored.detail}
+                </div>`;
+              }).join("")}
+            </div>
+          ` : ""}
+        </div>
+      `;
+    }
+
+    function riskTagClass(level) {
+      if (level === "高") return "danger";
+      if (level === "中") return "warn";
+      return "safe";
+    }
+
+    function mediumLongView(stock) {
+      const stBad = stock.stRiskLevel === "高";
+      const valuationHigh = stock.peTtm > 120 || stock.pb > 12;
+      const valuationOk = stock.peTtm > 0 && stock.peTtm < 80 && stock.pb > 0 && stock.pb < 8;
+      const mid = stBad
+        ? "中期先排除：存在明显ST/退市或无有效行情风险，短线也只适合观望。"
+        : stock.score >= 70 && stock.net >= 0
+          ? "中期偏强：资金和价格结构还在，回踩不破关键支撑可继续跟踪。"
+          : stock.net < 0
+            ? "中期谨慎：主力净流出，先等资金重新转正。"
+            : "中期中性：题材和流动性可看，但需要等趋势确认。";
+      const long = stBad
+        ? "长期不建议纳入池：先等风险标签解除、财报和公告确认。"
+        : valuationHigh
+          ? "长期谨慎：估值偏高，除非业绩高速兑现，否则性价比一般。"
+          : valuationOk && stock.fundamentalHealth >= 70
+            ? "长期可观察：估值和基本面风险暂可接受，适合放入观察池。"
+            : "长期观察：需要补充财报增速、利润质量和行业景气度后再定。";
+      return { mid, long };
+    }
+
+    function renderFundamentalPanel(stock) {
+      const views = mediumLongView(stock);
+      const riskClass = riskTagClass(stock.stRiskLevel);
+      const tags = [
+        `<span class="risk-tag ${riskClass}">ST风险：${stock.stRiskLevel}</span>`,
+        `<span class="risk-tag ${stock.fundamentalHealth >= 70 ? "safe" : stock.fundamentalHealth >= 45 ? "warn" : "danger"}">基本面健康度：${stock.fundamentalHealth}分</span>`,
+        `<span class="risk-tag">行业：${stock.industry || "--"}</span>`
+      ].join("");
+      return `
+        <div class="fundamental">
+          <div class="section-title"><i data-lucide="shield-alert"></i>基本面与ST风险雷达</div>
+          <div class="risk-tags">${tags}</div>
+          <div class="fundamental-grid">
+            <div class="fund-item"><span>总市值</span><b>${fmtCap(stock.totalMarketCap)}</b></div>
+            <div class="fund-item"><span>流通市值</span><b>${fmtCap(stock.floatMarketCap)}</b></div>
+            <div class="fund-item"><span>PE / TTM</span><b>${fmtRatio(stock.pe)} / ${fmtRatio(stock.peTtm)}</b></div>
+            <div class="fund-item"><span>PB</span><b>${fmtRatio(stock.pb)}</b></div>
+          </div>
+          <ol>${stock.stRiskReasons.map(reason => `<li>${reason}</li>`).join("")}</ol>
+          ${renderTargetPanel(stock)}
+          <div class="horizon-grid" style="margin-top:12px;">
+            <div class="horizon"><b>中期判断</b><span>${views.mid}</span></div>
+            <div class="horizon"><b>长期判断</b><span>${views.long}</span></div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function fetchEastmoneyStocks(codes) {
+      const secids = codes.map(code => `${marketPrefix(code)}.${code}`).join(",");
+      const fields = [
+        "f2", "f3", "f4", "f5", "f6", "f8", "f9", "f10", "f12", "f14",
+        "f15", "f16", "f17", "f18", "f20", "f21", "f23", "f62", "f66", "f69", "f72", "f75",
+        "f78", "f81", "f84", "f87", "f100", "f102", "f115", "f184"
+      ].join(",");
+      const url = `https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&secids=${encodeURIComponent(secids)}&fields=${fields}`;
+      const data = await eastmoneyJsonp(url);
+      const rows = data?.data?.diff || [];
+      if (!rows.length) throw new Error("东财没有返回行情数据");
+      return rows.map(quoteToStock);
+    }
+
+    function modeAdjustedAdvice(stock) {
+      const positive = stock.score >= 72 && stock.net > 0;
+      const weak = stock.score < 50 || stock.net < -30000;
+      if (state.mode === "auction") {
+        if (positive) return ["强烈关注", "竞价强承接", "开盘不破竞价均线再跟随"];
+        if (weak) return ["谨慎过滤", "竞价资金偏弱", "开盘冲高先看兑现"];
+        return ["低吸候选", "竞价信号一般", "等回踩支撑位确认"];
+      }
+      if (state.mode === "intraday") {
+        if (positive) return ["吸筹", "量能延续", "回踩不破可分批观察"];
+        if (weak) return ["出货", "大单流出", "先降仓位等风险释放"];
+        return ["等待", "震荡整理", "突破压力位再看"];
+      }
+      if (positive) return ["隔夜候选", "尾盘抢筹", "仓位控制后可留观察"];
+      if (weak) return ["不隔夜", "尾盘走弱", "次日先看修复力度"];
+      return ["观察", "收盘中性", "明日确认方向"];
+    }
+
+    async function generate() {
+      const codes = [...new Set([...(state.codes.length ? state.codes : defaultCodes()), ...state.queryCodes])];
+      state.dataSource = "正在拉取东方财富行情...";
+      render();
+      try {
+        const eastmoneyStocks = await fetchEastmoneyStocks(codes);
+        state.stocks = withModeScores(eastmoneyStocks).sort((a, b) => b.score - a.score);
+        state.dataSource = `东方财富实时行情 · ${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
+      } catch (error) {
+        console.warn(error);
+        state.stocks = withModeScores(codes.map(makeStock)).sort((a, b) => b.score - a.score);
+        state.dataSource = `东财拉取失败，已用模拟数据回退 · ${error.message}`;
+      }
+      if (!state.stocks.some(s => s.code === state.selected)) state.selected = state.stocks[0]?.code;
+      render();
+    }
+
+    function queryCodesFromInput() {
+      const input = document.getElementById("codesInput");
+      const incoming = normalizeCodes(input.value);
+      if (!incoming.length) {
+        state.dataSource = "请输入6位股票代码";
+        render();
+        return;
+      }
+      state.queryCodes = incoming.filter(code => !state.codes.includes(code));
+      state.selected = incoming[incoming.length - 1] || state.selected;
+      syncCodeInput("");
+      generate();
+    }
+
+    function addCodesFromInput() {
+      const input = document.getElementById("codesInput");
+      const incoming = normalizeCodes(input.value);
+      if (!incoming.length) {
+        state.dataSource = "请输入6位股票代码";
+        render();
+        return;
+      }
+      state.codes = [...new Set([...state.codes, ...incoming])];
+      state.queryCodes = state.queryCodes.filter(code => !state.codes.includes(code) && !incoming.includes(code));
+      state.selected = incoming[incoming.length - 1] || state.selected;
+      saveCodes();
+      syncCodeInput("");
+      generate();
+    }
+
+    function removeCode(code) {
+      state.codes = state.codes.filter(item => item !== code);
+      state.queryCodes = state.queryCodes.filter(item => item !== code);
+      if (!state.codes.length) state.codes = defaultCodes();
+      if (state.selected === code) state.selected = state.codes[0];
+      saveCodes();
+      generate();
+    }
+
+    function fmtMoney(n) {
+      const abs = Math.abs(n);
+      if (abs >= 10000) return `${Math.round(n / 10000)}万`;
+      return `${Math.round(n)}万`;
+    }
+
+    function renderMetrics() {
+      const copy = modeCopy[state.mode];
+      const heat = Math.round(state.stocks.reduce((sum, s) => sum + s.score, 0) / Math.max(1, state.stocks.length));
+      const upPct = Math.round(state.stocks.filter(s => s.chg >= 0).length / Math.max(1, state.stocks.length) * 100);
+      const limitCount = state.stocks.filter(s => s.chg > 9.5).length + Math.round(Math.random() * 4);
+      const amount = state.stocks.reduce((sum, s) => sum + s.amount, 0).toFixed(2);
+      const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+      const vals = [`${heat}分`, `${upPct}%`, limitCount, `${amount}亿`, time];
+      document.getElementById("metrics").innerHTML = copy.metrics.map((label, i) => `
+        <div class="metric"><span>${label}</span><strong>${vals[i]}</strong></div>
+      `).join("");
+      document.getElementById("statusText").textContent = `${copy.status} · ${state.dataSource}`;
+    }
+
+    function renderWatchlist() {
+      document.getElementById("poolCount").textContent = `${state.stocks.length}只`;
+      document.getElementById("watchlist").innerHTML = state.stocks.map(stock => `
+        <button class="watch-btn ${stock.code === state.selected ? "active" : ""}" data-code="${stock.code}">
+          <span>
+            <b>${stock.name}</b>
+            <span class="code">${stock.code} · ${stock.board}${stock.industry ? ` · ${stock.industry}` : ""}${state.queryCodes.includes(stock.code) ? " · 临时查询" : ""}</span>
+          </span>
+          <span>
+            <span class="${stock.chg >= 0 ? "price-up" : "price-down"}">${stock.chg >= 0 ? "+" : ""}${stock.chg}%</span>
+            <span class="watch-remove" data-remove-code="${stock.code}" title="删除"><i data-lucide="x"></i></span>
+          </span>
+        </button>
+      `).join("");
+      document.querySelectorAll(".watch-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          state.selected = btn.dataset.code;
+          render();
+        });
+      });
+      document.querySelectorAll(".watch-remove").forEach(btn => {
+        btn.addEventListener("click", event => {
+          event.stopPropagation();
+          removeCode(btn.dataset.removeCode);
+        });
+      });
+    }
+
+    function explainLines(stock, action) {
+      const upText = stock.chg >= 0 ? `当前涨了${stock.chg}%` : `当前跌了${Math.abs(stock.chg)}%`;
+      const netText = stock.net >= 0 ? "主力资金在流入，承接还在" : "主力资金在流出，短线要防兑现";
+      if (state.mode === "auction") {
+        return [
+          `${stock.name}开盘价${stock.open ?? "--"}元，竞价高开幅度约${stock.openPct ?? "--"}%。`,
+          `开盘后相对开盘价${stock.openHold >= 0 ? "走强" : "走弱"}${Math.abs(stock.openHold ?? 0)}%，这是判断竞价承接的核心。`,
+          `如果开盘后不破${stock.open ?? stock.support1}元，说明竞价资金没有马上兑现。`,
+          `第一买点看${stock.open ?? stock.support1}附近承接，第二买点看${stock.support1}附近回踩。`,
+          `冲到${stock.pressure1}元附近要看量能，没量容易冲高回落。`,
+          `${netText}，竞价策略更重视“开盘不破”和“回踩缩量”。`,
+          `结论：${action[0]}，置信度${stock.confidence}%，不追秒板，先等开盘后的第一轮承接。`
+        ];
+      }
+      if (state.mode === "intraday") {
+        return [
+          `${stock.name}现价${stock.price}元，${upText}。`,
+          `分时位置在全天区间的${stock.closePos ?? 50}%附近，位置越高越要确认量能。`,
+          `${netText}，大单方向决定盘中弹性。`,
+          `下方支撑看${stock.support1}元，跌破说明盘中承接变弱。`,
+          `上方压力看${stock.pressure1}元，放量突破才更像有效进攻。`,
+          `换手率${stock.turnover ?? "--"}%，成交额${stock.amount}亿，决定能不能做T。`,
+          `结论：${action[0]}，盘中不确定性更高，仓位要比竞价计划更灵活。`
+        ];
+      }
+      return [
+        `${stock.name}尾盘价格${stock.price}元，${upText}。`,
+        `收盘位置在全天区间的${stock.closePos ?? 50}%附近，越靠近高位越容易有隔夜预期。`,
+        `${netText}，尾盘更怕拉高出货。`,
+        `明日观察价先看${stock.pressure1}元，过不去就容易转震荡。`,
+        `隔夜风控线放在${stock.stop}元，低开破位要优先处理风险。`,
+        `如果尾盘站不稳${stock.support1}元，明天先按弱修复看。`,
+        `结论：${action[0]}，尾盘重点不是追涨，而是决定要不要留仓过夜。`
+      ];
+    }
+
+    function modeKeyValues(stock, shares, buy, stop) {
+      if (state.mode === "auction") {
+        return {
+          left: [
+            ["竞价/开盘价", stock.open ?? "--"],
+            ["高开幅度", `${stock.openPct ?? "--"}%`],
+            ["开盘承接", `${stock.openHold ?? "--"}%`],
+            ["竞价成交额", `${stock.amount}亿`],
+            ["预计可买", shares > 0 ? `${shares}股 / 约${Math.round(shares * buy)}元` : "资金不足一手"]
+          ],
+          right: [
+            ["回踩买点", stock.support1],
+            ["冲高压力", stock.pressure1],
+            ["竞价失效线", stop],
+            ["主力净额", fmtMoney(stock.net), stock.net >= 0 ? "price-up" : "price-down"],
+            ["行业", stock.industry || "--"]
+          ]
+        };
+      }
+      if (state.mode === "intraday") {
+        return {
+          left: [
+            ["现价", stock.price],
+            ["日内位置", `${stock.closePos ?? "--"}%`],
+            ["换手率", `${stock.turnover ?? "--"}%`],
+            ["成交额", `${stock.amount}亿`],
+            ["预计可买", shares > 0 ? `${shares}股 / 约${Math.round(shares * buy)}元` : "资金不足一手"]
+          ],
+          right: [
+            ["盘中支撑", stock.support1],
+            ["盘中压力", stock.pressure1],
+            ["做T止损", stop],
+            ["主力净额", fmtMoney(stock.net), stock.net >= 0 ? "price-up" : "price-down"],
+            ["筹码集中度", stock.concentration]
+          ]
+        };
+      }
+      return {
+        left: [
+          ["尾盘价", stock.price],
+          ["收盘位置", `${stock.closePos ?? "--"}%`],
+          ["全天最高", stock.high ?? "--"],
+          ["全天最低", stock.low ?? "--"],
+          ["预计可买", shares > 0 ? `${shares}股 / 约${Math.round(shares * buy)}元` : "资金不足一手"]
+        ],
+        right: [
+          ["明日观察价", stock.pressure1],
+          ["隔夜风控线", stop],
+          ["低开承接位", stock.support1],
+          ["主力净额", fmtMoney(stock.net), stock.net >= 0 ? "price-up" : "price-down"],
+          ["隔夜风险", `${stock.risk}分`]
+        ]
+      };
+    }
+
+    function modeScoreLabels() {
+      if (state.mode === "auction") return ["竞价强度", "开盘承接", "过滤风险"];
+      if (state.mode === "intraday") return ["盘中强度", "量价动能", "做T空间"];
+      return ["隔夜预期", "收盘位置", "隔夜风险"];
+    }
+
+    function modeBarLabels() {
+      if (state.mode === "auction") return ["高开有效率", "竞价兑现风险", "竞价流动性"];
+      if (state.mode === "intraday") return ["上攻概率", "回撤概率", "分时流动性"];
+      return ["明日溢价率", "隔夜风险", "尾盘流动性"];
+    }
+
+    function actionCards(stock, buy, sell) {
+      if (state.mode === "auction") {
+        return [
+          ["不追高开", `高开后先看${stock.open ?? buy}是否守住，破了就过滤`],
+          ["回踩低吸", `回踩${buy}附近缩量、有承接再考虑`],
+          ["冲高兑现", `靠近${sell}没继续放量，先落袋一部分`],
+          ["竞价失效", `开盘急跌破${stock.support1}，放弃竞价计划`]
+        ];
+      }
+      if (state.mode === "intraday") {
+        return [
+          ["盘中低吸", `回踩${buy}不破，且主力净额不继续恶化`],
+          ["做T高抛", `冲到${sell}附近看卖压，转弱就减`],
+          ["追涨条件", `放量突破${sell}后再看加速，不提前抢`],
+          ["风险处理", `跌破${stock.stop}，短线计划失效`]
+        ];
+      }
+      return [
+        ["留仓条件", `收在${stock.support1}上方且尾盘不跳水`],
+        ["隔夜仓位", `只留确认仓，不把盘中利润全压过夜`],
+        ["明日高开", `高开冲${sell}先看兑现，不盲目加仓`],
+        ["明日低开", `低开破${stock.stop}先控风险，再等修复`]
+      ];
+    }
+
+    function sectorPulse(stock) {
+      const peers = state.stocks.filter(item => item.industry && item.industry === stock.industry);
+      const count = peers.length || 1;
+      const avg = Math.round(peers.reduce((sum, item) => sum + item.score, 0) / count);
+      const upCount = peers.filter(item => item.chg >= 0).length;
+      const leader = [...peers].sort((a, b) => b.score - a.score)[0] || stock;
+      const role = leader.code === stock.code ? "板块领涨/核心候选" : `跟随 ${leader.name}`;
+      const strength = avg >= 75 ? "强主线" : avg >= 60 ? "可持续观察" : "弱轮动";
+      return { count, avg, upCount, leader, role, strength };
+    }
+
+    function tradeTriggers(stock) {
+      const buyLow = stock.support1;
+      const buyHigh = +(stock.support1 * 1.012).toFixed(priceDigits(stock.price));
+      const noChase = +(stock.pressure1 * .99).toFixed(priceDigits(stock.price));
+      const stop = stock.stop;
+      const position = stock.stRiskLevel === "高" ? "0成，先排除" : stock.score >= 80 ? "2-3成试仓" : stock.score >= 65 ? "1-2成低吸" : "0-1成观察";
+      return {
+        buyZone: `${buyLow}-${buyHigh}`,
+        noChase: `${noChase}以上不追`,
+        stop,
+        takeProfit: stock.pressure1,
+        position,
+        condition: stock.net >= 0 ? "主力净额不转负且回踩缩量" : "先等主力净额转正"
+      };
+    }
+
+    function holdingView(stock) {
+      const holding = readHolding(stock.code);
+      const cost = Number(holding.cost) || 0;
+      const shares = Number(holding.shares) || 0;
+      const profit = cost > 0 && shares > 0 ? (stock.price - cost) * shares : 0;
+      const profitPct = cost > 0 ? ((stock.price / cost - 1) * 100) : 0;
+      const maxRisk = cost > 0 && shares > 0 ? Math.max(0, (cost - stock.stop) * shares) : 0;
+      const plan = !cost || !shares
+        ? "未填写持仓，按观察计划处理。"
+        : profit >= 0
+          ? `浮盈${profitPct.toFixed(1)}%，冲到${stock.pressure1}附近可分批兑现。`
+          : `浮亏${Math.abs(profitPct).toFixed(1)}%，跌破${stock.stop}优先控制风险。`;
+      return { holding, cost, shares, profit, profitPct, maxRisk, plan };
+    }
+
+    function pageAlerts(stock) {
+      const alerts = [];
+      if (stock.stRiskLevel === "高") alerts.push(["danger", "基本面/ST风险高：优先排除，不参与短线博弈。"]);
+      if (stock.price <= stock.stop) alerts.push(["danger", `已接近/跌破止损线 ${stock.stop}，先处理风险。`]);
+      if (stock.price >= stock.pressure1) alerts.push(["warn", `已到压力位 ${stock.pressure1} 附近，注意冲高兑现。`]);
+      if (stock.net < 0) alerts.push(["warn", `主力净额为 ${fmtMoney(stock.net)}，盘中不要盲目加仓。`]);
+      if (stock.score >= 80 && stock.net >= 0) alerts.push(["", "强势信号：回踩不破支撑且缩量时优先观察低吸。"]);
+      if (!alerts.length) alerts.push(["", "暂无强预警，按计划观察支撑、压力和资金方向。"]);
+      return alerts;
+    }
+
+    function scoreReviewItem(item) {
+      const stock = state.stocks.find(s => s.code === item.code);
+      if (!stock) {
+        return { label: "待更新", cls: "", detail: "当前监控池暂无该股票行情" };
+      }
+      const move = item.price > 0 ? ((stock.price / item.price - 1) * 100) : 0;
+      const bullish = /关注|低吸|吸筹|隔夜|候选|观察/.test(item.action);
+      const bearish = /出货|谨慎|不隔夜|排除/.test(item.action);
+      if (bullish && stock.price >= item.pressure) {
+        return { label: "命中压力", cls: "safe", detail: `现价${stock.price}，较记录${move.toFixed(1)}%` };
+      }
+      if (bullish && item.targetPrice && stock.price >= item.targetPrice) {
+        return { label: "命中目标", cls: "safe", detail: `现价${stock.price}，已达目标价${item.targetPrice}` };
+      }
+      if (bullish && stock.price <= item.stop) {
+        return { label: "触发止损", cls: "danger", detail: `现价${stock.price}，止损线${item.stop}` };
+      }
+      if (bearish && stock.price <= item.price) {
+        return { label: "风险判断有效", cls: "safe", detail: `现价${stock.price}，较记录${move.toFixed(1)}%` };
+      }
+      if (bearish && stock.price > item.pressure) {
+        return { label: "风险误判", cls: "danger", detail: `现价${stock.price}，已突破${item.pressure}` };
+      }
+      if (Math.abs(move) >= 3) {
+        return { label: move > 0 ? "浮盈观察" : "走弱观察", cls: move > 0 ? "safe" : "warn", detail: `较记录${move.toFixed(1)}%` };
+      }
+      return { label: "未触发", cls: "", detail: `现价${stock.price}，较记录${move.toFixed(1)}%` };
+    }
+
+    function reviewStats(items) {
+      const scored = items.map(item => scoreReviewItem(item));
+      const done = scored.filter(s => /命中|有效|止损|误判/.test(s.label));
+      const wins = done.filter(s => /命中|有效/.test(s.label)).length;
+      return {
+        total: items.length,
+        done: done.length,
+        wins,
+        winRate: done.length ? Math.round(wins / done.length * 100) : 0
+      };
+    }
+
+    function renderMain() {
+      const stock = state.stocks.find(s => s.code === state.selected) || state.stocks[0];
+      if (!stock) return;
+      const action = modeAdjustedAdvice(stock);
+      const cardClass = action[0].includes("出货") || action[0].includes("不隔夜") || action[0].includes("谨慎") ? "risk" : action[0].includes("等待") || action[0].includes("观察") ? "warn" : "";
+      const buy = stock.support1;
+      const sell = stock.pressure1;
+      const stop = stock.stop;
+      const cash = Math.max(0, Number(document.getElementById("cashInput").value) || 0);
+      const shares = Math.floor(cash / Math.max(1, buy) / 100) * 100;
+      const lines = explainLines(stock, action);
+      const modeValues = modeKeyValues(stock, shares, buy, stop);
+      const scoreLabels = modeScoreLabels();
+      const barLabels = modeBarLabels();
+      const cards = actionCards(stock, buy, sell);
+      document.getElementById("mainAnalysis").innerHTML = `
+        <article class="agent-card">
+          <div class="stock-head">
+            <div>
+              <h3>${stock.name}</h3>
+              <div class="code">${stock.code} · ${stock.board}${stock.industry ? ` · ${stock.industry}` : ""} · ${stock.source || "模拟"}</div>
+            </div>
+            <div>
+              <div class="big-price ${stock.chg >= 0 ? "price-up" : "price-down"}">${stock.price}</div>
+              <div class="change ${stock.chg >= 0 ? "price-up" : "price-down"}">${stock.chg >= 0 ? "+" : ""}${stock.chg}%</div>
+            </div>
+          </div>
+          <div class="badges">
+            <span class="badge ${action[0].includes("出货") || action[0].includes("不隔夜") ? "sell" : action[0].includes("等待") || action[0].includes("观察") ? "wait" : "buy"}">${action[0]}</span>
+            <span class="badge info">置信度 ${stock.confidence}%</span>
+            <span class="badge">${action[1]}</span>
+            <span class="badge info">${modeCopy[state.mode].title}</span>
+          </div>
+          <div class="grid2">
+            <div class="kv">
+              ${modeValues.left.map(([label, value, cls]) => `<div><span>${label}</span><b class="${cls || ""}">${value}</b></div>`).join("")}
+            </div>
+            <div class="kv">
+              ${modeValues.right.map(([label, value, cls]) => `<div><span>${label}</span><b class="${cls || ""}">${value}</b></div>`).join("")}
+            </div>
+          </div>
+          <div class="score-grid">
+            <div class="score-box"><span>${scoreLabels[0]}</span><strong>${stock.score}</strong></div>
+            <div class="score-box"><span>${scoreLabels[1]}</span><strong>${stock.momentum}</strong></div>
+            <div class="score-box"><span>${scoreLabels[2]}</span><strong>${state.mode === "close" ? stock.risk : Math.max(10, 100 - stock.risk)}</strong></div>
+          </div>
+          <div class="bars">
+            <div class="bar-row"><span>${barLabels[0]}</span><div class="track"><div class="fill red" style="width:${stock.score}%"></div></div><b>${stock.score}</b></div>
+            <div class="bar-row"><span>${barLabels[1]}</span><div class="track"><div class="fill green" style="width:${stock.risk}%"></div></div><b>${stock.risk}</b></div>
+            <div class="bar-row"><span>${barLabels[2]}</span><div class="track"><div class="fill" style="width:${stock.liquidity}%"></div></div><b>${stock.liquidity}</b></div>
+          </div>
+          <div class="explain">
+            <div class="section-title"><i data-lucide="message-square"></i>大白话解释</div>
+            <ol>${lines.map(line => `<li>${line}</li>`).join("")}</ol>
+          </div>
+          ${renderDecisionTools(stock)}
+          ${state.simpleMode ? "" : renderFundamentalPanel(stock)}
+          <div class="strategy ${cardClass}">
+            <div class="section-title"><i data-lucide="badge-check"></i>${modeCopy[state.mode].actionName} · ${action[0]} · ${action[2]}</div>
+            <div class="kv">
+              <div><span>买入价</span><b class="price-up">${buy}</b></div>
+              <div><span>卖出价</span><b class="price-down">${sell}</b></div>
+              <div><span>止损价</span><b class="price-up">${stop}</b></div>
+            </div>
+            <div class="action-grid">
+              ${cards.map(([title, body]) => `<div class="action"><b>${title}</b><small>${body}</small></div>`).join("")}
+            </div>
+          </div>
+        </article>
+      `;
+      lucide.createIcons();
+    }
+
+    function renderCandidates() {
+      const list = [...state.stocks].sort((a, b) => b.score - a.score);
+      document.getElementById("candidateCount").textContent = `${list.length}只`;
+      document.getElementById("candidates").innerHTML = list.map(stock => {
+        const action = modeAdjustedAdvice(stock);
+        const stText = stock.stRiskLevel === "高"
+          ? " 基本面风险高，优先排除。"
+          : stock.stRiskLevel === "中"
+            ? " 基本面有瑕疵，降低仓位。"
+            : " ST风险低。";
+        const reason = state.mode === "auction"
+          ? `${action[0]}：重点看开盘价${stock.open ?? "--"}能否守住，竞价高开${stock.openPct ?? "--"}%，承接${stock.openHold ?? "--"}%。`
+          : state.mode === "intraday"
+            ? `${action[0]}：优先看${stock.support1}附近承接，分时位置${stock.closePos ?? "--"}%，主力净额${fmtMoney(stock.net)}。`
+            : `${action[0]}：收盘位置${stock.closePos ?? "--"}%，明日观察${stock.pressure1}，隔夜风控${stock.stop}。`;
+        return `
+          <div class="candidate">
+            <div class="candidate-top">
+              <span>${stock.name} ${stock.code}</span>
+              <span class="score-pill">${stock.score}</span>
+            </div>
+            <p>${reason} 风险${stock.risk}分。${stText}</p>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function bindTargetInputs() {
+      document.querySelectorAll(".target-profit-input, .target-pe-input").forEach(input => {
+        input.addEventListener("change", () => {
+          const code = input.dataset.code;
+          const profitInput = document.querySelector(`.target-profit-input[data-code="${code}"]`);
+          const peInput = document.querySelector(`.target-pe-input[data-code="${code}"]`);
+          const config = {};
+          if (profitInput?.value.trim()) config.profit = Number(profitInput.value);
+          if (peInput?.value.trim()) config.pe = Number(peInput.value);
+          saveTargetConfig(code, config);
+          render();
+        });
+      });
+    }
+
+    function bindToolInputs() {
+      document.querySelectorAll(".holding-cost-input, .holding-shares-input").forEach(input => {
+        input.addEventListener("change", () => {
+          const code = input.dataset.code;
+          const costInput = document.querySelector(`.holding-cost-input[data-code="${code}"]`);
+          const sharesInput = document.querySelector(`.holding-shares-input[data-code="${code}"]`);
+          saveHolding(code, {
+            cost: costInput?.value.trim() ? Number(costInput.value) : "",
+            shares: sharesInput?.value.trim() ? Number(sharesInput.value) : ""
+          });
+          render();
+        });
+      });
+      const toggle = document.getElementById("simpleModeToggle");
+      if (toggle) {
+        toggle.addEventListener("change", () => {
+          state.simpleMode = toggle.checked;
+          saveSimpleMode();
+          render();
+        });
+      }
+      const recordBtn = document.getElementById("recordReviewBtn");
+      if (recordBtn) {
+        recordBtn.addEventListener("click", () => {
+          const stock = state.stocks.find(s => s.code === state.selected) || state.stocks[0];
+          if (!stock) return;
+          appendReview(stock, modeAdjustedAdvice(stock));
+          render();
+        });
+      }
+    }
+
+    function render() {
+      renderMetrics();
+      renderWatchlist();
+      renderMain();
+      renderCandidates();
+      bindTargetInputs();
+      bindToolInputs();
+      lucide.createIcons();
+    }
+
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        state.mode = tab.dataset.mode;
+        generate();
+      });
+    });
+
+    document.getElementById("refreshBtn").addEventListener("click", addCodesFromInput);
+    document.getElementById("queryBtn").addEventListener("click", queryCodesFromInput);
+    document.getElementById("codesInput").addEventListener("keydown", event => {
+      if (event.key === "Enter") addCodesFromInput();
+    });
+    document.getElementById("pullBtn").addEventListener("click", () => {
+      generate();
+    });
+    state.codes = loadSavedCodes();
+    loadSimpleMode();
+    syncCodeInput("");
+    setupAccessGate();
+    if (!document.body.classList.contains("locked")) generate();
+  </script>
+</body>
+</html>
