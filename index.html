@@ -145,7 +145,7 @@
 
     .controls {
       display: grid;
-      grid-template-columns: 1fr 120px 180px 160px;
+      grid-template-columns: minmax(300px, 1fr) 140px 140px 160px;
       gap: 10px;
       align-items: end;
     }
@@ -992,7 +992,6 @@
         grid-column: auto;
       }
 
-      .controls label:nth-child(2),
       #pullBtn {
         display: none;
       }
@@ -1446,12 +1445,8 @@
 
       <div class="controls">
         <label>
-          添加代码
-          <input id="codesInput" value="603005,002185,002436,600360,603203,300476" />
-        </label>
-        <label>
-          可用资金
-          <input id="cashInput" value="5300" inputmode="numeric" />
+          股票代码或名称
+          <input id="codesInput" value="" placeholder="如 600519、贵州茅台，可输入多个" autocomplete="off" />
         </label>
         <button class="btn primary" id="refreshBtn" title="重新生成分析">
           <i data-lucide="plus"></i>添加
@@ -1651,13 +1646,37 @@
       return ["603005", "002185", "002436", "600360", "603203", "300476"];
     }
 
-    function normalizeCodes(value) {
-      return [...new Set(String(value || "")
-        .split(/[,\s，、]+/)
-        .map(s => s.trim())
-        .filter(Boolean)
-        .map(s => s.replace(/\D/g, ""))
-        .filter(s => /^\d{6}$/.test(s)))];
+    async function searchStockCode(keyword) {
+      const term = String(keyword || "").trim();
+      const directCode = term.replace(/\D/g, "");
+      if (/^\d{6}$/.test(directCode)) return directCode;
+
+      const normalized = term.replace(/\s+/g, "").toLowerCase();
+      const localMatch = Object.entries(stockNames).find(([, name]) => {
+        const candidate = name.replace(/\s+/g, "").toLowerCase();
+        return candidate === normalized;
+      });
+      if (localMatch) return localMatch[0];
+
+      const url = `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(term)}&type=14&token=D43BF722C8E33BDC906FB84D85E326E8&count=10`;
+      const data = await eastmoneyJsonp(url, 7000);
+      const rows = data?.QuotationCodeTable?.Data || [];
+      const aShares = rows.filter(row => row.Classify === "AStock" && /^\d{6}$/.test(row.Code));
+      const exact = aShares.find(row => String(row.Name || "").replace(/\s+/g, "").toLowerCase() === normalized);
+      const match = exact || aShares[0];
+      if (!match) throw new Error(`没有找到“${term}”对应的A股`);
+      stockNames[match.Code] = match.Name || stockNames[match.Code] || term;
+      return match.Code;
+    }
+
+    async function resolveStockInputs(value) {
+      const terms = String(value || "")
+        .split(/[,\s，、;；]+/)
+        .map(term => term.trim())
+        .filter(Boolean);
+      if (!terms.length) return [];
+      const codes = await Promise.all(terms.map(searchStockCode));
+      return [...new Set(codes)];
     }
 
     function loadSavedCodes() {
@@ -2285,34 +2304,48 @@
       render();
     }
 
-    function queryCodesFromInput() {
+    async function queryCodesFromInput() {
       const input = document.getElementById("codesInput");
-      const incoming = normalizeCodes(input.value);
-      if (!incoming.length) {
-        state.dataSource = "请输入6位股票代码";
+      if (!input.value.trim()) {
+        state.dataSource = "请输入股票代码或名称";
         render();
         return;
       }
-      state.queryCodes = incoming.filter(code => !state.codes.includes(code));
-      state.selected = incoming[incoming.length - 1] || state.selected;
-      syncCodeInput("");
-      generate();
+      state.dataSource = "正在搜索股票名称...";
+      render();
+      try {
+        const incoming = await resolveStockInputs(input.value);
+        state.queryCodes = incoming.filter(code => !state.codes.includes(code));
+        state.selected = incoming[incoming.length - 1] || state.selected;
+        syncCodeInput("");
+        generate();
+      } catch (error) {
+        state.dataSource = error.message || "股票名称搜索失败";
+        render();
+      }
     }
 
-    function addCodesFromInput() {
+    async function addCodesFromInput() {
       const input = document.getElementById("codesInput");
-      const incoming = normalizeCodes(input.value);
-      if (!incoming.length) {
-        state.dataSource = "请输入6位股票代码";
+      if (!input.value.trim()) {
+        state.dataSource = "请输入股票代码或名称";
         render();
         return;
       }
-      state.codes = [...new Set([...state.codes, ...incoming])];
-      state.queryCodes = state.queryCodes.filter(code => !state.codes.includes(code) && !incoming.includes(code));
-      state.selected = incoming[incoming.length - 1] || state.selected;
-      saveCodes();
-      syncCodeInput("");
-      generate();
+      state.dataSource = "正在搜索并添加股票...";
+      render();
+      try {
+        const incoming = await resolveStockInputs(input.value);
+        state.codes = [...new Set([...state.codes, ...incoming])];
+        state.queryCodes = state.queryCodes.filter(code => !state.codes.includes(code) && !incoming.includes(code));
+        state.selected = incoming[incoming.length - 1] || state.selected;
+        saveCodes();
+        syncCodeInput("");
+        generate();
+      } catch (error) {
+        state.dataSource = error.message || "股票名称搜索失败";
+        render();
+      }
     }
 
     function removeCode(code) {
@@ -2468,15 +2501,14 @@
       ];
     }
 
-    function modeKeyValues(stock, shares, buy, stop) {
+    function modeKeyValues(stock, buy, stop) {
       if (state.mode === "auction") {
         return {
           left: [
             ["竞价/开盘价", stock.open ?? "--"],
             ["高开幅度", `${stock.openPct ?? "--"}%`],
             ["开盘承接", `${stock.openHold ?? "--"}%`],
-            ["竞价成交额", `${stock.amount}亿`],
-            ["预计可买", shares > 0 ? `${shares}股 / 约${Math.round(shares * buy)}元` : "资金不足一手"]
+            ["竞价成交额", `${stock.amount}亿`]
           ],
           right: [
             ["回踩买点", stock.support1],
@@ -2493,8 +2525,7 @@
             ["现价", stock.price],
             ["日内位置", `${stock.closePos ?? "--"}%`],
             ["换手率", `${stock.turnover ?? "--"}%`],
-            ["成交额", `${stock.amount}亿`],
-            ["预计可买", shares > 0 ? `${shares}股 / 约${Math.round(shares * buy)}元` : "资金不足一手"]
+            ["成交额", `${stock.amount}亿`]
           ],
           right: [
             ["盘中支撑", stock.support1],
@@ -2510,8 +2541,7 @@
           ["尾盘价", stock.price],
           ["收盘位置", `${stock.closePos ?? "--"}%`],
           ["全天最高", stock.high ?? "--"],
-          ["全天最低", stock.low ?? "--"],
-          ["预计可买", shares > 0 ? `${shares}股 / 约${Math.round(shares * buy)}元` : "资金不足一手"]
+          ["全天最低", stock.low ?? "--"]
         ],
         right: [
           ["明日观察价", stock.pressure1],
@@ -2662,10 +2692,8 @@
       const buy = stock.support1;
       const sell = stock.pressure1;
       const stop = stock.stop;
-      const cash = Math.max(0, Number(document.getElementById("cashInput").value) || 0);
-      const shares = Math.floor(cash / Math.max(1, buy) / 100) * 100;
       const lines = explainLines(stock, action);
-      const modeValues = modeKeyValues(stock, shares, buy, stop);
+      const modeValues = modeKeyValues(stock, buy, stop);
       const scoreLabels = modeScoreLabels();
       const barLabels = modeBarLabels();
       const cards = actionCards(stock, buy, sell);
