@@ -2230,44 +2230,125 @@
       return `stockAgentExecutionPlan:${tradingDayKey()}:${code}`;
     }
 
-    function buildExecutionPlan(stock) {
+    function calibrationPhaseReached() {
+      return !["preopen", "auction", "auction_lock"].includes(state.phaseKey);
+    }
+
+    function buildExecutionPlan(stock, options = {}) {
       const digits = priceDigits(stock.price);
-      const buyLow = +stock.support1.toFixed(digits);
-      const buyHigh = +(stock.support1 * 1.012).toFixed(digits);
-      const breakout = +(stock.pressure1 * 1.004).toFixed(digits);
-      const target1 = +stock.pressure1.toFixed(digits);
-      const target2 = +(stock.pressure2 || stock.pressure1 * 1.045).toFixed(digits);
+      const trend = stock.trendData;
+      const anchorPrice = options.anchorPrice || stock.prevClose || stock.price;
+      const atrPct = Math.max(1.5, Math.min(6, trend?.atr14 || stock.amplitude || 3));
+      const atr = anchorPrice * atrPct / 100;
+      const supports = [trend?.ma5, trend?.ma10, stock.low]
+        .filter(value => Number(value) > 0 && value < anchorPrice * .998);
+      const structuralSupport = supports.length ? Math.max(...supports) : anchorPrice - atr * .65;
+      const support = Math.min(anchorPrice - atr * .15, Math.max(anchorPrice - atr * .85, structuralSupport));
+      const buyLow = +(support - atr * .15).toFixed(digits);
+      const buyHigh = +Math.min(anchorPrice, support + atr * .12).toFixed(digits);
+      const breakout = +Math.max(stock.high || 0, anchorPrice + atr * .72).toFixed(digits);
+      const target1 = +Math.max(breakout, anchorPrice + atr * 1.15).toFixed(digits);
+      const target2 = +Math.max(target1 + atr * .45, anchorPrice + atr * 1.9).toFixed(digits);
+      const stop = +Math.max(.01, buyLow - atr * .55).toFixed(digits);
+      const calibratedNow = options.calibrated === true || calibrationPhaseReached();
       return {
-        version: 1,
+        version: 2,
         date: tradingDayKey(),
         code: stock.code,
         createdAt: Date.now(),
-        anchorPrice: stock.price,
+        anchorPrice: +anchorPrice.toFixed(digits),
+        atr: +atr.toFixed(digits),
+        atrPct: +atrPct.toFixed(2),
+        usesTrendData: Boolean(trend),
         buyLow,
         buyHigh,
         breakout,
-        noChaseAbove: +(breakout * 1.018).toFixed(digits),
+        noChaseAbove: +(breakout + atr * .3).toFixed(digits),
         target1,
         target2,
-        stop: +stock.stop.toFixed(digits),
+        stop,
+        protectStop: +Math.max(buyHigh, target1 - atr * .5).toFixed(digits),
+        stage: calibratedNow ? "locked" : "preplan",
+        calibratedAt: calibratedNow ? Date.now() : 0,
+        recalibrated: false,
+        calibrationReason: calibratedNow ? (options.reason || "首次打开时已过9:35，按当前结构建立并锁定") : "等待9:35开盘验证",
         events: {}
+      };
+    }
+
+    function calibrateExecutionPlan(stock, plan) {
+      if (plan.calibratedAt || !calibrationPhaseReached()) return plan;
+      const gapPct = Math.abs(stock.openPct || 0);
+      const normalGap = Math.max(1.5, (plan.atrPct || 3) * .65);
+      const openInvalid = stock.open <= plan.stop || stock.open >= plan.noChaseAbove;
+      const priceInvalid = stock.price <= plan.stop || stock.price >= plan.noChaseAbove;
+      const shouldRebuild = gapPct >= normalGap || openInvalid || priceInvalid;
+      if (shouldRebuild) {
+        const anchorPrice = (stock.open || stock.price) * .6 + stock.price * .4;
+        const rebuilt = buildExecutionPlan(stock, {
+          anchorPrice,
+          calibrated: true,
+          reason: gapPct >= normalGap
+            ? `开盘偏离${gapPct.toFixed(1)}%，超过正常阈值${normalGap.toFixed(1)}%`
+            : "原预案开盘即落在失效区"
+        });
+        return {
+          ...rebuilt,
+          createdAt: plan.createdAt,
+          preplan: {
+            buyLow: plan.buyLow,
+            buyHigh: plan.buyHigh,
+            breakout: plan.breakout,
+            stop: plan.stop
+          },
+          recalibrated: true,
+          events: plan.events || {}
+        };
+      }
+      return {
+        ...plan,
+        stage: "locked",
+        calibratedAt: Date.now(),
+        recalibrated: false,
+        calibrationReason: `开盘偏离${gapPct.toFixed(1)}%，未超过${normalGap.toFixed(1)}%，确认原预案`
       };
     }
 
     function getExecutionPlan(stock) {
       let plan;
+      let planChanged = false;
       try {
         plan = JSON.parse(localStorage.getItem(executionPlanKey(stock.code)) || "null");
       } catch {
         plan = null;
       }
-      if (!plan || plan.date !== tradingDayKey() || plan.version !== 1) {
+      if (!plan || plan.date !== tradingDayKey() || plan.version !== 2) {
         plan = buildExecutionPlan(stock);
-        if (state.lastSuccessAt && stock.source === "东方财富") {
-          localStorage.setItem(executionPlanKey(stock.code), JSON.stringify(plan));
-        }
+        planChanged = true;
+      }
+      if (plan.stage === "preplan" && !plan.usesTrendData && stock.trendData) {
+        const enriched = buildExecutionPlan(stock, { anchorPrice: plan.anchorPrice });
+        plan = {
+          ...enriched,
+          createdAt: plan.createdAt,
+          events: plan.events || {},
+          calibrationReason: "日线与ATR已就绪，盘前预案已补全，等待9:35验证"
+        };
+        planChanged = true;
+      }
+      const calibrated = calibrateExecutionPlan(stock, plan);
+      const changed = planChanged || calibrated !== plan;
+      plan = calibrated;
+      if (state.lastSuccessAt && stock.source === "东方财富" && (!localStorage.getItem(executionPlanKey(stock.code)) || changed)) {
+        localStorage.setItem(executionPlanKey(stock.code), JSON.stringify(plan));
       }
       return plan;
+    }
+
+    function planLockStatus(plan) {
+      if (plan.stage === "preplan") return `盘前预案 · ${plan.calibrationReason}`;
+      if (plan.recalibrated) return `9:35已唯一校准 · ${plan.calibrationReason}`;
+      return `9:35已锁定 · ${plan.calibrationReason}`;
     }
 
     function updateExecutionPlanEvents(stock, plan) {
@@ -2294,6 +2375,8 @@
     }
 
     function resetExecutionPlan(code) {
+      const confirmed = window.confirm("只有除权、复牌、行情数据异常或原计划明显失真时才应重建。确认作废今天已锁定的计划吗？");
+      if (!confirmed) return;
       localStorage.removeItem(executionPlanKey(code));
       render();
     }
@@ -2312,6 +2395,7 @@
         if (stock.price <= plan.stop) return ["止损触发", `跌破固定止损 ${plan.stop}`, "优先执行风控"];
         if (stock.price >= plan.target2) return ["止盈触发", `到达第二目标 ${plan.target2}`, "分批兑现剩余仓位"];
         if (stock.price >= plan.target1) return ["减仓触发", `到达第一目标 ${plan.target1}`, "先兑现一部分"];
+        if (plan.events?.target1 && stock.price <= plan.protectStop) return ["保护止盈触发", `一档止盈后回落至保护线 ${plan.protectStop}`, "处理剩余仓位，不上移目标价"];
         if (spike?.detected && spike.decayRisk >= 65) return ["回落减仓预警", `直线拉升后回落风险 ${spike.decayRisk}分`, "可先降低仓位保护利润"];
         return ["持有观察", `卖点 ${plan.target1}/${plan.target2} 未到`, `跌破 ${plan.stop} 执行止损`];
       }
@@ -2468,7 +2552,7 @@
     function trackStrategySignal(stock) {
       const plan = getExecutionPlan(stock);
       const action = executionSignal(stock, plan);
-      if (!/低吸触发|突破触发|回落减仓预警|止损触发|减仓触发|止盈触发|直线诱多风险/.test(action[0])) return;
+      if (!/低吸触发|突破触发|回落减仓预警|止损触发|减仓触发|止盈触发|保护止盈触发|直线诱多风险/.test(action[0])) return;
       const ledger = readSignalLedger();
       const id = `${tradingDayKey()}-${stock.code}-${action[0]}`;
       if (ledger.some(item => item.id === id)) return;
@@ -2540,7 +2624,7 @@
       const holding = readHolding(stock.code);
       const hasHolding = Number(holding.cost) > 0 && Number(holding.shares) > 0;
       const actionableBuy = /低吸触发|突破触发/.test(action[0]);
-      const actionableSell = /止损触发|减仓触发|止盈触发|回落减仓预警/.test(action[0]);
+      const actionableSell = /止损触发|减仓触发|止盈触发|保护止盈触发|回落减仓预警/.test(action[0]);
       let position = "0成，继续观察";
       if (hasHolding) position = actionableSell ? "按卖出信号降低仓位" : "按固定止损管理现有仓位";
       else if (actionableBuy && quality.score >= 80) position = "2-3成试仓";
@@ -3564,7 +3648,7 @@
           <div class="alert-list">
             ${alerts.map(([cls, text]) => `<div class="alert-item ${cls}">${text}</div>`).join("")}
           </div>
-          <button class="btn ghost reset-plan-btn" data-reset-plan="${stock.code}" style="width:100%; margin-top:10px;"><i data-lucide="rotate-ccw"></i>按当前行情重定计划</button>
+          <button class="btn ghost reset-plan-btn" data-reset-plan="${stock.code}" style="width:100%; margin-top:10px;"><i data-lucide="rotate-ccw"></i>特殊情况：作废并重建计划</button>
           <button class="btn ghost" id="recordReviewBtn" style="width:100%; margin-top:10px;"><i data-lucide="archive"></i>记录本次判断</button>
           ${history.length ? `
             <div class="mini-card" style="margin-top:10px;">
@@ -3870,7 +3954,7 @@
       const netText = stock.net >= 0 ? "主力资金在流入，承接还在" : "主力资金在流出，短线要防兑现";
       return [
         `${stock.name}现价${stock.price}元，${upText}；${netText}。`,
-        `本计划在${new Date(plan.createdAt).toLocaleTimeString("zh-CN", { hour12: false })}按${plan.anchorPrice}元锁定，今天实时刷新不会再移动价位。`,
+        `本计划在${new Date(plan.createdAt).toLocaleTimeString("zh-CN", { hour12: false })}按${plan.anchorPrice}元生成；${planLockStatus(plan)}。`,
         `低吸只看固定区间${plan.buyLow}-${plan.buyHigh}，到价后还要满足资金不弱，不是碰到就买。`,
         `突破只认固定价${plan.breakout}，高于${plan.noChaseAbove}视为错过，今天不再追。`,
         `持仓卖点固定为${plan.target1}先减仓、${plan.target2}再止盈；跌破${plan.stop}执行止损。`,
@@ -3915,7 +3999,7 @@
       return [
         ["低吸触发", `进入${plan.buyLow}-${plan.buyHigh}且主力不弱，才考虑小仓确认`],
         ["突破触发", `站上${plan.breakout}且不高于${plan.noChaseAbove}；跌回${rr.breakoutStop}视为失败`],
-        ["分批卖出", `到${plan.target1}先减仓，到${plan.target2}再兑现，不等移动目标`],
+        ["分批卖出", `到${plan.target1}先减仓；之后回落到${plan.protectStop}保护止盈，到${plan.target2}再兑现`],
         ["风险处理", `跌破固定止损${plan.stop}，当天计划失效`]
       ];
     }
@@ -3964,6 +4048,8 @@
           ? `已到二档止盈${planLevels.target2}，优先兑现。`
           : stock.price >= planLevels.target1
             ? `已到一档止盈${planLevels.target1}，先减仓。`
+            : planLevels.events?.target1 && stock.price <= planLevels.protectStop
+              ? `一档止盈后已回落到保护线${planLevels.protectStop}，处理剩余仓位。`
             : stock.price <= planLevels.stop
               ? `已破固定止损${planLevels.stop}，优先控制风险。`
               : `卖点固定在${planLevels.target1}/${planLevels.target2}，止损${planLevels.stop}。`;
@@ -4072,8 +4158,8 @@
             <div class="quick-level"><span>固定止损</span><b>${plan.stop}</b></div>
           </div>
           <div class="plan-lock-row">
-            <span><i data-lucide="lock-keyhole"></i>今日计划锁定 · ${planEventText(plan)}</span>
-            <button class="reset-plan-btn" data-reset-plan="${stock.code}" title="按当前行情重新计算"><i data-lucide="rotate-ccw"></i>重定</button>
+            <span><i data-lucide="lock-keyhole"></i>${planLockStatus(plan)} · ${planEventText(plan)}</span>
+            <button class="reset-plan-btn" data-reset-plan="${stock.code}" title="仅在除权、复牌或数据异常时重建"><i data-lucide="rotate-ccw"></i>特殊重建</button>
           </div>
           <div class="quick-note ${topAlert[0] || ""}">${topAlert[1]} 主力净额 ${fmtMoney(stock.net)}。</div>
         </section>
