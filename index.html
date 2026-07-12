@@ -723,6 +723,122 @@
 
     .announcement-list span { color: var(--muted); }
 
+    .news-radar-panel {
+      margin-bottom: 14px;
+      border: 1px solid #31506a;
+      border-radius: 8px;
+      background: #0e1721;
+      padding: 14px;
+    }
+
+    .news-radar-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .news-radar-head .section-title { margin-bottom: 3px; }
+    .news-radar-head > div > span { color: var(--muted); font-size: 12px; }
+
+    .news-radar-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .news-radar-controls textarea {
+      min-height: 70px;
+      resize: vertical;
+    }
+
+    .news-radar-controls button,
+    .x-account-row button {
+      min-width: 92px;
+      border: 1px solid #31536f;
+      border-radius: 6px;
+      background: #15324a;
+      color: #d9efff;
+      font-weight: 800;
+    }
+
+    .x-account-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      margin-bottom: 9px;
+    }
+
+    .x-account-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .x-account-list > span {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid #2b3e52;
+      border-radius: 5px;
+      background: #111d29;
+      overflow: hidden;
+    }
+
+    .x-account-list a {
+      color: #a9d6f5;
+      padding: 5px 8px;
+      font-size: 11px;
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    .x-account-list button {
+      width: 26px;
+      height: 26px;
+      border: 0;
+      border-left: 1px solid #2b3e52;
+      background: transparent;
+      color: #ff8794;
+    }
+
+    .x-account-list button svg { width: 13px; height: 13px; }
+
+    .radar-list { display: grid; gap: 7px; }
+
+    .radar-item {
+      display: grid;
+      grid-template-columns: 74px minmax(0, 1fr) auto;
+      gap: 9px;
+      align-items: start;
+      padding: 9px;
+      border: 1px solid #243447;
+      border-left: 3px solid #4f87b0;
+      border-radius: 6px;
+      background: #0a121a;
+    }
+
+    .radar-item.positive { border-left-color: var(--red); }
+    .radar-item.negative { border-left-color: var(--green); }
+    .radar-item.risk { border-left-color: var(--yellow); }
+
+    .radar-source,
+    .radar-item small { color: var(--muted); font-size: 11px; line-height: 1.4; }
+    .radar-item b { display: block; margin-bottom: 5px; line-height: 1.45; }
+    .radar-item a { color: #8fcfff; text-decoration: none; }
+
+    .radar-remove {
+      width: 28px;
+      height: 28px;
+      border: 0;
+      background: transparent;
+      color: #ff8794;
+    }
+
+    .radar-remove svg { width: 15px; height: 15px; }
+
     .confirmation-panel {
       margin-bottom: 14px;
       border: 1px solid #294058;
@@ -2139,6 +2255,12 @@
         padding: 12px;
       }
 
+      .news-radar-panel { margin-bottom: 10px; padding: 11px; }
+      .news-radar-head > div > span { display: none; }
+      .news-radar-controls { grid-template-columns: 1fr; }
+      .news-radar-controls button { min-height: 40px; }
+      .radar-item { grid-template-columns: 62px minmax(0, 1fr) auto; padding: 8px; }
+
       .market-risk-head {
         align-items: flex-start;
       }
@@ -2455,6 +2577,7 @@
       marketContext: null,
       announcementCache: {},
       forecastCache: {},
+      researchCache: {},
       chartMode: "daily",
       mobilePoolOpen: false
     };
@@ -3544,6 +3667,30 @@
       return data;
     }
 
+    async function fetchResearchReports(stock) {
+      const now = new Date();
+      const begin = new Date(now.getFullYear() - 2, now.getMonth(), now.getDate());
+      const dateText = value => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+      const url = `https://reportapi.eastmoney.com/report/list?pageSize=8&beginTime=${dateText(begin)}&endTime=${dateText(now)}&code=${stock.code}&qType=0&pageNo=1`;
+      const response = await eastmoneyJsonp(url, 10000);
+      return (response?.data || []).map(item => ({
+        id: item.infoCode,
+        title: item.title || "个股研报",
+        date: String(item.publishDate || "").slice(0, 10),
+        org: item.orgSName || item.orgName || "研究机构",
+        rating: item.emRatingName || item.rating || "",
+        url: item.infoCode ? `https://data.eastmoney.com/report/zw_stock.jshtml?infocode=${item.infoCode}` : `https://data.eastmoney.com/report/stock.jshtml?code=${stock.code}`
+      }));
+    }
+
+    async function getResearchReports(stock) {
+      const cached = state.researchCache[stock.code];
+      if (cached && Date.now() - cached.fetchedAt < 30 * 60 * 1000) return cached.items;
+      const items = await fetchResearchReports(stock);
+      state.researchCache[stock.code] = { fetchedAt: Date.now(), items };
+      return items;
+    }
+
     function announcementRiskStatus(stock) {
       if (!Array.isArray(stock.announcements)) {
         return { level: "未知", cls: "warn", risks: [], positives: [], recent: [], label: "公告数据尚未加载" };
@@ -3632,6 +3779,104 @@
             <div><span>行业集中度</span><b class="${portfolio.cls}">${portfolio.positions.length ? `${portfolio.industryWeight}%` : "--"}</b><small>${portfolio.topIndustry} · 组合浮盈亏${Math.round(portfolio.totalProfit)}元</small></div>
           </div>
           ${announcements.length ? `<div class="announcement-list">${announcements.map(item => `<div><span>${item.date}</span><b>${item.title}</b></div>`).join("")}</div>` : ""}
+        </section>
+      `;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function manualNewsKey() {
+      return "stockAgentManualNewsV1";
+    }
+
+    function readManualNews() {
+      try {
+        const items = JSON.parse(localStorage.getItem(manualNewsKey()) || "[]");
+        return Array.isArray(items) ? items : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveManualNews(items) {
+      localStorage.setItem(manualNewsKey(), JSON.stringify(items.slice(0, 100)));
+    }
+
+    function xAccountsKey() {
+      return "stockAgentXAccountsV1";
+    }
+
+    function readXAccounts() {
+      try {
+        const items = JSON.parse(localStorage.getItem(xAccountsKey()) || "[]");
+        return Array.isArray(items) ? items : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveXAccounts(items) {
+      localStorage.setItem(xAccountsKey(), JSON.stringify([...new Set(items)].slice(0, 30)));
+    }
+
+    function classifyNewsText(value) {
+      const text = String(value || "");
+      const risk = /立案|调查|问询|处罚|退市|减持|冻结|诉讼|终止|停牌|风险提示|异常波动|传闻|未经证实/;
+      const negative = /亏损|下修|下降|流出|违约|暴雷|裁员|被罚|订单减少|不及预期|解禁/;
+      const positive = /增持|回购|中标|预增|增长|突破|量产|涨价|订单|合作|获批|分红|超预期/;
+      if (risk.test(text)) return { cls: "risk", label: "风险事件" };
+      if (negative.test(text)) return { cls: "negative", label: "偏利空" };
+      if (positive.test(text)) return { cls: "positive", label: "偏利好" };
+      return { cls: "neutral", label: "中性/待判断" };
+    }
+
+    function renderNewsRadarPanel(stock) {
+      const announcementUrl = `https://data.eastmoney.com/notices/stock/${stock.code}.html`;
+      const announcements = (stock.announcements || []).slice(0, 6).map(item => {
+        const tone = classifyNewsText(item.title);
+        return { id: `ann-${item.code}`, date: item.date, source: "公司公告", confidence: "高可信", title: item.title, url: announcementUrl, ...tone };
+      });
+      const reports = (stock.researchReports || []).slice(0, 6).map(item => {
+        const tone = classifyNewsText(item.title);
+        return { id: `report-${item.id}`, date: item.date, source: item.org, confidence: item.rating ? `研报 · ${item.rating}` : "机构研报", title: item.title, url: item.url, ...tone };
+      });
+      const manual = readManualNews().filter(item => item.code === stock.code).map(item => ({ ...item, confidence: "社交媒体 · 待核实" }));
+      const items = [...manual, ...announcements, ...reports]
+        .sort((a, b) => Date.parse(b.date || 0) - Date.parse(a.date || 0))
+        .slice(0, 12);
+      const riskCount = items.filter(item => item.cls === "risk" || item.cls === "negative").length;
+      const accounts = readXAccounts();
+      return `
+        <section class="news-radar-panel">
+          <div class="news-radar-head">
+            <div><div class="section-title"><i data-lucide="satellite-dish"></i>消息雷达</div><span>自动汇总公告与研报；X消息由你导入，默认按待核实处理</span></div>
+            <span class="confirm-summary ${riskCount ? "warn" : "safe"}">${items.length}条 · 风险${riskCount}条</span>
+          </div>
+          <div class="news-radar-controls">
+            <textarea id="xMessageInput" placeholder="粘贴X链接，并附上原文或摘要；将自动归到 ${escapeHtml(stock.name)}"></textarea>
+            <button id="saveXMessageBtn"><i data-lucide="link"></i>导入X消息</button>
+          </div>
+          <div class="x-account-row">
+            <input id="xAccountInput" placeholder="添加重点X账号，如 DeItaone" autocomplete="off" />
+            <button id="addXAccountBtn"><i data-lucide="user-plus"></i>添加账号</button>
+          </div>
+          ${accounts.length ? `<div class="x-account-list">${accounts.map(handle => `<span><a href="https://x.com/${encodeURIComponent(handle)}" target="_blank" rel="noopener">@${escapeHtml(handle)}</a><button data-remove-x-account="${escapeHtml(handle)}" title="删除"><i data-lucide="x"></i></button></span>`).join("")}</div>` : ""}
+          <div class="radar-list">
+            ${items.length ? items.map(item => `
+              <article class="radar-item ${item.cls}">
+                <div class="radar-source"><b>${escapeHtml(item.source)}</b>${escapeHtml(item.date || "--")}</div>
+                <div><b>${item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a>` : escapeHtml(item.title)}</b><small>${escapeHtml(item.label)} · ${escapeHtml(item.confidence)}</small></div>
+                ${item.manual ? `<button class="radar-remove" data-remove-news="${escapeHtml(item.id)}" title="删除"><i data-lucide="x"></i></button>` : `<span></span>`}
+              </article>
+            `).join("") : `<div class="alert-item">暂无公告、研报或手动导入消息。</div>`}
+          </div>
         </section>
       `;
     }
@@ -4277,12 +4522,13 @@
     async function attachMarketContext(code) {
       const stock = state.stocks.find(item => item.code === code);
       if (!stock) return;
-      const [trendResult, intradayResult, marketResult, announcementResult, forecastResult] = await Promise.allSettled([
+      const [trendResult, intradayResult, marketResult, announcementResult, forecastResult, researchResult] = await Promise.allSettled([
         getTrendData(stock),
         getIntradayData(stock),
         getMarketContext(),
         getStockAnnouncements(stock),
-        getProfitForecast(stock)
+        getProfitForecast(stock),
+        getResearchReports(stock)
       ]);
       if (trendResult.status === "fulfilled") stock.trendData = trendResult.value;
       else console.warn("日线指标加载失败", trendResult.reason);
@@ -4293,6 +4539,8 @@
       else console.warn("公告加载失败", announcementResult.reason);
       if (forecastResult.status === "fulfilled") stock.forecastData = forecastResult.value;
       else console.warn("机构盈利预测加载失败", forecastResult.reason);
+      if (researchResult.status === "fulfilled") stock.researchReports = researchResult.value;
+      else console.warn("个股研报加载失败", researchResult.reason);
       trackStrategySignal(stock);
       evaluateSignalLedger(stock);
       if (state.selected === code) render();
@@ -4802,12 +5050,13 @@
       if (!state.stocks.some(s => s.code === state.selected)) state.selected = state.stocks[0]?.code;
       const selectedStock = state.stocks.find(stock => stock.code === state.selected);
       if (selectedStock?.source === "东方财富") {
-        const [trendResult, intradayResult, marketResult, announcementResult, forecastResult] = await Promise.allSettled([
+        const [trendResult, intradayResult, marketResult, announcementResult, forecastResult, researchResult] = await Promise.allSettled([
           getTrendData(selectedStock),
           getIntradayData(selectedStock),
           getMarketContext(),
           getStockAnnouncements(selectedStock),
-          getProfitForecast(selectedStock)
+          getProfitForecast(selectedStock),
+          getResearchReports(selectedStock)
         ]);
         if (trendResult.status === "fulfilled") selectedStock.trendData = trendResult.value;
         else console.warn("日线指标加载失败", trendResult.reason);
@@ -4818,6 +5067,8 @@
         else console.warn("公告加载失败", announcementResult.reason);
         if (forecastResult.status === "fulfilled") selectedStock.forecastData = forecastResult.value;
         else console.warn("机构盈利预测加载失败", forecastResult.reason);
+        if (researchResult.status === "fulfilled") selectedStock.researchReports = researchResult.value;
+        else console.warn("个股研报加载失败", researchResult.reason);
         trackStrategySignal(selectedStock);
         evaluateSignalLedger(selectedStock);
       }
@@ -5212,6 +5463,7 @@
         </section>
         ${renderDailyStrategyPanel(stock)}
         ${renderPriceChart(stock)}
+        ${renderNewsRadarPanel(stock)}
         ${compactView ? "" : `
           ${renderCycleStrategyPanel(stock)}
           ${renderMarketRiskPanel(stock)}
@@ -5312,6 +5564,61 @@
     }
 
     function bindToolInputs() {
+      const saveXMessageBtn = document.getElementById("saveXMessageBtn");
+      if (saveXMessageBtn) {
+        saveXMessageBtn.addEventListener("click", () => {
+          const input = document.getElementById("xMessageInput");
+          const raw = input?.value.trim() || "";
+          const url = raw.match(/https?:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/[A-Za-z0-9_]+\/status\/\d+/i)?.[0] || "";
+          if (!url) {
+            state.dataSource = "导入失败：请粘贴完整的X帖子链接，并尽量附上原文或摘要";
+            render();
+            return;
+          }
+          const stock = state.stocks.find(item => item.code === state.selected);
+          if (!stock) return;
+          const title = raw.replace(url, "").trim() || "X消息链接（未填写原文摘要）";
+          const tone = classifyNewsText(title);
+          const handle = url.match(/(?:x\.com|twitter\.com)\/([A-Za-z0-9_]+)/i)?.[1] || "X";
+          const items = readManualNews();
+          items.unshift({
+            id: `x-${Date.now()}`,
+            manual: true,
+            code: stock.code,
+            date: tradingDayKey(),
+            source: `X @${handle}`,
+            title,
+            url,
+            ...tone
+          });
+          saveManualNews(items);
+          state.dataSource = `已导入${stock.name}的X消息，默认标记为待核实`;
+          render();
+        });
+      }
+      const addXAccountBtn = document.getElementById("addXAccountBtn");
+      if (addXAccountBtn) {
+        addXAccountBtn.addEventListener("click", () => {
+          const input = document.getElementById("xAccountInput");
+          const raw = input?.value.trim() || "";
+          const handle = raw.replace(/^https?:\/\/(?:www\.)?x\.com\//i, "").replace(/^@/, "").split(/[/?#]/)[0].replace(/[^A-Za-z0-9_]/g, "");
+          if (!handle) return;
+          saveXAccounts([...readXAccounts(), handle]);
+          render();
+        });
+      }
+      document.querySelectorAll("[data-remove-x-account]").forEach(button => {
+        button.addEventListener("click", () => {
+          saveXAccounts(readXAccounts().filter(handle => handle !== button.dataset.removeXAccount));
+          render();
+        });
+      });
+      document.querySelectorAll("[data-remove-news]").forEach(button => {
+        button.addEventListener("click", () => {
+          saveManualNews(readManualNews().filter(item => item.id !== button.dataset.removeNews));
+          render();
+        });
+      });
       document.querySelectorAll("[data-mobile-stock]").forEach(button => {
         button.addEventListener("click", () => {
           state.selected = button.dataset.mobileStock;
