@@ -2846,27 +2846,40 @@
     }
 
     function trackStrategySignal(stock) {
+      if (["preopen", "auction", "auction_lock", "rest"].includes(state.phaseKey) || stock.source !== "东方财富") return;
       const plan = getExecutionPlan(stock);
       const action = executionSignal(stock, plan);
-      if (!/低吸触发|突破触发|回落减仓预警|逃顶减仓预警|止损触发|减仓触发|止盈触发|保护止盈触发|直线诱多风险/.test(action[0])) return;
+      const cycle = analyzeCycleStrategies(stock);
       const ledger = readSignalLedger();
-      const id = `${tradingDayKey()}-${stock.code}-${action[0]}`;
-      if (ledger.some(item => item.id === id)) return;
       const quality = strategyQualityStatus(stock, plan);
-      const direction = /低吸触发|突破触发/.test(action[0]) ? "up" : "down";
-      ledger.unshift({
-        id,
-        date: tradingDayKey(),
-        code: stock.code,
-        name: stock.name,
-        action: action[0],
-        direction,
-        ts: Date.now(),
-        price: stock.price,
-        quality: quality.score,
-        outcomes: {}
+      const candidates = [];
+      if (/低吸触发|突破触发|回落减仓预警|止损触发|减仓触发|止盈触发|保护止盈触发|直线诱多风险/.test(action[0])) {
+        candidates.push({ action: action[0], direction: /低吸触发|突破触发/.test(action[0]) ? "up" : "down" });
+      }
+      if (cycle?.topLevel === "高") candidates.push({ action: "逃顶策略", direction: "down" });
+      if (cycle?.bottomReady) candidates.push({ action: "抄底策略", direction: "up" });
+      if (cycle?.dayTState === "日内T卖点观察") candidates.push({ action: "日内T卖点", direction: "down" });
+      if (cycle?.dayTState === "日内T接回观察") candidates.push({ action: "日内T接回", direction: "up" });
+      if (cycle?.waveState === "波段T减仓区") candidates.push({ action: "波段T卖点", direction: "down" });
+      let changed = false;
+      candidates.forEach(candidate => {
+        const id = `${tradingDayKey()}-${stock.code}-${candidate.action}`;
+        if (ledger.some(item => item.id === id)) return;
+        ledger.unshift({
+          id,
+          date: tradingDayKey(),
+          code: stock.code,
+          name: stock.name,
+          action: candidate.action,
+          direction: candidate.direction,
+          ts: Date.now(),
+          price: stock.price,
+          quality: quality.score,
+          outcomes: {}
+        });
+        changed = true;
       });
-      saveSignalLedger(ledger);
+      if (changed) saveSignalLedger(ledger);
     }
 
     function evaluateSignalLedger(stock) {
@@ -2882,7 +2895,8 @@
             const target = item.ts + minutes * 60 * 1000;
             if (Date.now() < target) return;
             const bar = bars.find(candidate => minuteTimestamp(candidate.time) >= target);
-            const price = bar?.close || stock.price;
+            if (!bar) return;
+            const price = bar.close;
             const change = item.price ? ((price / item.price) - 1) * 100 : 0;
             item.outcomes ||= {};
             item.outcomes[minutes] = {
@@ -2930,8 +2944,8 @@
       };
     }
 
-    function ledgerHorizonStats(horizon) {
-      const evaluated = readSignalLedger().filter(item => item.outcomes?.[horizon]);
+    function ledgerHorizonStats(horizon, code = "", action = "") {
+      const evaluated = readSignalLedger().filter(item => (!code || item.code === code) && (!action || item.action === action) && item.outcomes?.[horizon]);
       const hits = evaluated.filter(item => item.outcomes[horizon].hit).length;
       return {
         samples: evaluated.length,
@@ -2948,14 +2962,16 @@
     function renderSignalLedgerPanel(stock) {
       const ledger = readSignalLedger();
       const rows = ledger.filter(item => item.code === stock.code).slice(0, 8);
-      const stats15 = ledgerHorizonStats(15);
-      const statsD1 = ledgerHorizonStats("d1");
-      const statsD5 = ledgerHorizonStats("d5");
+      const stats15 = ledgerHorizonStats(15, stock.code);
+      const statsD1 = ledgerHorizonStats("d1", stock.code);
+      const statsD5 = ledgerHorizonStats("d5", stock.code);
+      const strategyNames = [...new Set(ledger.filter(item => item.code === stock.code).map(item => item.action))].slice(0, 6);
       const statText = (label, stats) => stats.samples >= 10 ? `${label}${stats.rate}%（${stats.samples}）` : `${label}样本${stats.samples}/10`;
       return `
         <div class="mini-card" style="margin-top:10px;">
           <b>自动信号交易账本</b>
-          <span>${statText("15分钟", stats15)} · ${statText("次日", statsD1)} · ${statText("5日", statsD5)}。不足10个样本不认定准确率。</span>
+          <span>当前股票：${statText("15分钟", stats15)} · ${statText("次日", statsD1)} · ${statText("5日", statsD5)}。不足10个样本不认定准确率。</span>
+          ${strategyNames.length ? `<div class="chart-legend">${strategyNames.map(name => { const stat = ledgerHorizonStats(15, stock.code, name); return `<span>${name}：${stat.samples >= 10 ? `${stat.rate}%` : `${stat.samples}/10`}</span>`; }).join("")}</div>` : ""}
         </div>
         ${rows.length ? `<div class="ledger-table">
           <div class="ledger-row header"><span>日期</span><span>策略</span><span>15分钟</span><span>次日</span><span>5日</span><span>质量</span></div>
@@ -3639,6 +3655,8 @@
       const holding = readHolding(stock.code);
       const hasHolding = Number(holding.shares) > 0 && Number(holding.cost) > 0;
       const availableShares = Math.max(0, Number(holding.availableShares ?? holding.shares) || 0);
+      const todayReduced = Math.max(0, Number(holding.todayReduced) || 0);
+      const recommendedSell = availableShares < 100 ? availableShares : Math.max(100, Math.floor(availableShares * .25 / 100) * 100);
       const plan = getExecutionPlan(stock);
       const intradayBars = stock.intradayData?.bars?.filter(item => item.close > 0) || [];
       const latestMinute = intradayBars.at(-1);
@@ -3682,11 +3700,11 @@
         dayTCls = "danger";
       } else if (hasHolding && availableShares > 0 && stock.price >= daySell) {
         dayTState = "日内T卖点观察";
-        dayTAction = `只减可卖底仓的20%-30%，接回区固定为${plan.buyLow}-${plan.buyHigh}`;
+        dayTAction = `参考减${recommendedSell}股（约25%可卖底仓），接回区固定为${plan.buyLow}-${plan.buyHigh}`;
         dayTCls = "safe";
       } else if (hasHolding && availableShares > 0 && stock.price >= plan.buyLow && stock.price <= plan.buyHigh && shortScore >= 0) {
         dayTState = "日内T接回观察";
-        dayTAction = "仅接回今天已减出的数量，不额外扩大总仓位";
+        dayTAction = todayReduced > 0 ? `最多接回今日已减的${todayReduced}股，不扩大总仓位` : "今日已减数量为0，先登记卖出后再考虑接回";
         dayTCls = "safe";
       }
 
@@ -3751,7 +3769,7 @@
         { name: "逃顶策略", state: topState, cls: topLevel === "高" ? "danger" : topLevel === "中" ? "warn" : "safe", detail: topHits.length ? topHits.map(item => item.text).join(" · ") : "高位、背离、量价和资金均未共振", action: topAction },
         { name: "抄底策略", state: bottomState, cls: bottomReady ? "safe" : bottomHits.length >= 3 ? "warn" : "danger", detail: `${bottomHits.length}/5项超跌 · ${reversalConfirmed ? "已见止跌确认" : "尚无止跌确认"}`, action: bottomAction }
       ];
-      return { items, shortScore, longScore, topLevel, bottomReady, topHits, bottomHits };
+      return { items, shortScore, longScore, topLevel, bottomReady, topHits, bottomHits, dayTState, waveState };
     }
 
     function renderCycleStrategyPanel(stock) {
@@ -3820,7 +3838,7 @@
       let plot = "";
       if (mode === "intraday") {
         const points = source.map((item, index) => `${xAt(index).toFixed(1)},${yAt(item.close).toFixed(1)}`).join(" ");
-        const avgPoints = source.filter(item => item.avgPrice > 0).map((item, index) => `${xAt(index).toFixed(1)},${yAt(item.avgPrice).toFixed(1)}`).join(" ");
+        const avgPoints = source.map((item, index) => item.avgPrice > 0 ? `${xAt(index).toFixed(1)},${yAt(item.avgPrice).toFixed(1)}` : "").filter(Boolean).join(" ");
         plot = `<polyline points="${points}" fill="none" stroke="#43a5ff" stroke-width="2"/><polyline points="${avgPoints}" fill="none" stroke="#ffbd3e" stroke-width="1.2" opacity=".9"/>`;
       } else {
         const candleWidth = Math.max(2, Math.min(8, (right - left) / source.length * .55));
@@ -3853,13 +3871,16 @@
         : cycle?.bottomReady
           ? `<text x="${right - 8}" y="${Math.min(bottom - 5, yAt(stock.price) + 16)}" text-anchor="end" fill="#ff596a" font-size="12" font-weight="700">抄底观察</text>`
           : "";
+      const labelFor = item => mode === "daily" ? item.date.slice(5) : String(item.time || "").slice(11, 16);
+      const labelIndexes = [0, Math.floor((source.length - 1) / 2), source.length - 1];
+      const axisLabels = labelIndexes.map((index, position) => `<text x="${xAt(index)}" y="284" text-anchor="${position === 0 ? "start" : position === 2 ? "end" : "middle"}" fill="#7990a5" font-size="10">${labelFor(source[index])}</text>`).join("");
       return `
         <section class="price-chart-panel">
           <div class="chart-head">
             <div class="section-title"><i data-lucide="candlestick-chart"></i>价格图与策略标记</div>
             <div class="chart-switch"><button class="${mode === "daily" ? "active" : ""}" data-chart-mode="daily">日线</button><button class="${mode === "intraday" ? "active" : ""}" data-chart-mode="intraday">分时</button></div>
           </div>
-          <div class="price-chart-wrap"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="${stock.name}${mode === "daily" ? "日线" : "分时"}策略图">${grids}${levels}${plot}${marks}${currentMarker}</svg></div>
+          <div class="price-chart-wrap"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="${stock.name}${mode === "daily" ? "日线" : "分时"}策略图">${grids}${levels}${plot}${marks}${currentMarker}${axisLabels}</svg></div>
           <div class="chart-legend"><span>红：上涨/买入信号</span><span>绿：下跌/卖出信号</span><span>黄：MA5/分时均价</span><span>紫：MA20</span><span>虚线：当天锁定计划</span></div>
         </section>
       `;
@@ -4467,6 +4488,27 @@
       `;
     }
 
+    function renderMobilePositionPanel(stock) {
+      const holding = holdingView(stock);
+      return `
+        <section class="tool-panel">
+          <div class="section-title"><i data-lucide="wallet-cards"></i>持仓与信号账本</div>
+          <div class="holding-inputs">
+            <label>持仓成本<input class="holding-cost-input" data-code="${stock.code}" value="${holding.holding.cost ?? ""}" placeholder="${stock.price}" inputmode="decimal" /></label>
+            <label>持仓股数<input class="holding-shares-input" data-code="${stock.code}" value="${holding.holding.shares ?? ""}" placeholder="100" inputmode="numeric" /></label>
+            <label>可卖底仓<input class="holding-available-input" data-code="${stock.code}" value="${holding.holding.availableShares ?? (holding.shares || "")}" placeholder="100" inputmode="numeric" /></label>
+            <label>今日已减<input class="holding-reduced-input" data-code="${stock.code}" value="${holding.holding.todayReduced ?? ""}" placeholder="0" inputmode="numeric" /></label>
+          </div>
+          <div class="target-result">
+            <div class="fund-item"><span>浮盈浮亏</span><b class="${holding.profit >= 0 ? "price-up" : "price-down"}">${holding.shares ? `${Math.round(holding.profit)}元 / ${holding.profitPct.toFixed(1)}%` : "--"}</b></div>
+            <div class="fund-item"><span>可卖 / 今日已减</span><b>${holding.shares ? `${holding.availableShares} / ${holding.todayReduced}股` : "--"}</b></div>
+            <div class="fund-item"><span>当前处理</span><b>${holding.plan}</b></div>
+          </div>
+          ${renderSignalLedgerPanel(stock)}
+        </section>
+      `;
+    }
+
     function riskTagClass(level) {
       if (level === "高") return "danger";
       if (level === "中") return "warn";
@@ -4981,6 +5023,7 @@
             <div class="mini-card"><b>固定卖点</b>${triggers.takeProfit} 先减 / ${triggers.takeProfit2} 止盈<br><span class="code">不随实时价格上移</span></div>
             <div class="mini-card"><b>仓位与风控</b>${triggers.position} · 跌破 ${triggers.stop} 当日计划失效</div>
           </section>
+          ${renderMobilePositionPanel(stock)}
         ` : `
         <article class="agent-card">
           <div class="stock-head">
