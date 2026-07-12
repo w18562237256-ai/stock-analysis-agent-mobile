@@ -2513,19 +2513,19 @@
         title: "竞价分析",
         status: "集合竞价重点看高开强度、封单变化、竞价成交额和开盘承接",
         actionName: "做T策略",
-        metrics: ["竞价热度", "高开占比", "强势家数", "竞价成交额", "更新时间"]
+        metrics: ["池内强度", "池内红盘", "池内涨停", "池内成交额", "更新时间"]
       },
       intraday: {
         title: "盘中分析",
         status: "盘中重点看量能延续、回踩承接、突破有效性和大单方向",
         actionName: "盘中策略",
-        metrics: ["主板热度", "上涨占比", "涨停家数", "主板成交额", "更新时间"]
+        metrics: ["池内强度", "池内红盘", "池内涨停", "池内成交额", "更新时间"]
       },
       close: {
         title: "尾盘复盘",
         status: "尾盘重点看收盘位置、尾盘抢筹、次日预期和隔夜风险",
         actionName: "明日预案",
-        metrics: ["尾盘热度", "红盘占比", "回封家数", "尾盘资金", "更新时间"]
+        metrics: ["池内强度", "池内红盘", "池内涨停", "池内成交额", "更新时间"]
       }
     };
 
@@ -4519,9 +4519,7 @@
         ? (forecast.targetMin + forecast.targetMax) / 2
         : estimate?.eps > 0
           ? estimate.eps * defaultTargetPe(stock)
-          : stock.price > 0 && inferred > 0
-            ? stock.price * 1.15
-            : 0;
+          : 0;
       const targetPe = estimate?.eps > 0 && targetPrice > 0 ? targetPrice / estimate.eps : defaultTargetPe(stock);
       const targetMarketCap = totalShares > 0 ? targetPrice * totalShares : forecastProfit * targetPe * 100000000;
       const upside = stock.price > 0 && targetPrice > 0 ? ((targetPrice / stock.price - 1) * 100) : 0;
@@ -4541,7 +4539,7 @@
         optimistic,
         source: forecast
           ? hasTargetRange ? "东财机构一致预期 + 研报目标区间" : "东财机构一致预期EPS"
-          : "无机构盈利预测，TTM回退估算"
+          : "无机构盈利预测，不生成目标价"
       };
     }
 
@@ -4554,7 +4552,7 @@
         <div class="target-box">
           <div class="target-head">
             <div class="section-title"><i data-lucide="crosshair"></i>机构盈利预测与目标价</div>
-            <span class="risk-tag ${forecast ? "safe" : "warn"}">${forecast ? `东财自动更新 ${updateTime}` : "暂无机构覆盖"}</span>
+            <span class="risk-tag ${forecast ? "safe" : "warn"}">${forecast ? `本次拉取 ${updateTime}` : "暂无机构覆盖"}</span>
           </div>
           <div class="target-result">
             <div class="fund-item"><span>中性目标价</span><b class="${upsideClass}">${target.targetPrice ? target.targetPrice.toFixed(2) : "--"}</b></div>
@@ -4943,12 +4941,16 @@
 
     function renderMetrics() {
       const copy = modeCopy[state.mode];
+      const hasRealData = state.stocks.some(stock => stock.source === "东方财富");
       const heat = Math.round(state.stocks.reduce((sum, s) => sum + s.score, 0) / Math.max(1, state.stocks.length));
-      const upPct = Math.round(state.stocks.filter(s => s.chg >= 0).length / Math.max(1, state.stocks.length) * 100);
-      const limitCount = state.stocks.filter(s => s.chg > 9.5).length + Math.round(Math.random() * 4);
+      const upPct = Math.round(state.stocks.filter(s => s.chg > 0).length / Math.max(1, state.stocks.length) * 100);
+      const limitCount = state.stocks.filter(stock => {
+        const threshold = /(^|[^A-Z])\*?ST/i.test(stock.name || "") ? 4.8 : /^(300|301|688)/.test(stock.code) ? 19.5 : 9.5;
+        return stock.chg >= threshold;
+      }).length;
       const amount = state.stocks.reduce((sum, s) => sum + s.amount, 0).toFixed(2);
       const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
-      const vals = [`${heat}分`, `${upPct}%`, limitCount, `${amount}亿`, time];
+      const vals = hasRealData ? [`${heat}分`, `${upPct}%`, limitCount, `${amount}亿`, time] : ["--", "--", "--", "--", time];
       document.getElementById("metrics").innerHTML = copy.metrics.map((label, i) => `
         <div class="metric"><span>${label}</span><strong>${vals[i]}</strong></div>
       `).join("");
