@@ -644,6 +644,85 @@
     .measured-accuracy.ready { color: #b9eacc; background: rgba(40, 215, 111, .08); }
     .measured-accuracy.sampling { color: #e6cf9d; background: rgba(255, 189, 62, .08); }
 
+    .market-risk-panel {
+      margin-bottom: 14px;
+      border: 1px solid #304356;
+      border-radius: 8px;
+      background: #111923;
+      padding: 14px;
+    }
+
+    .market-risk-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .market-risk-head .section-title { margin-bottom: 3px; }
+    .market-risk-head > div > span { color: var(--muted); font-size: 12px; }
+
+    .market-index-grid,
+    .market-risk-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .market-index-grid { margin-bottom: 8px; }
+
+    .market-index-grid > div,
+    .market-risk-grid > div {
+      min-height: 72px;
+      padding: 9px;
+      border: 1px solid #273548;
+      border-radius: 6px;
+      background: #0d151e;
+    }
+
+    .market-index-grid span,
+    .market-index-grid small,
+    .market-risk-grid span,
+    .market-risk-grid small {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .market-index-grid b,
+    .market-risk-grid b {
+      display: block;
+      margin: 6px 0 4px;
+      font-size: 15px;
+      overflow-wrap: anywhere;
+    }
+
+    .market-risk-grid b.safe { color: var(--red); }
+    .market-risk-grid b.warn { color: var(--yellow); }
+    .market-risk-grid b.danger { color: var(--green); }
+
+    .announcement-list {
+      display: grid;
+      gap: 6px;
+      margin-top: 9px;
+    }
+
+    .announcement-list > div {
+      display: grid;
+      grid-template-columns: 82px minmax(0, 1fr);
+      gap: 8px;
+      padding: 7px 9px;
+      border-left: 3px solid #3b6688;
+      border-radius: 5px;
+      background: #0d151e;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .announcement-list span { color: var(--muted); }
+
     .confirmation-panel {
       margin-bottom: 14px;
       border: 1px solid #294058;
@@ -1786,6 +1865,26 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
+      .market-risk-panel {
+        margin-bottom: 10px;
+        padding: 12px;
+      }
+
+      .market-risk-head {
+        align-items: flex-start;
+      }
+
+      .market-risk-head > div > span { display: none; }
+
+      .market-index-grid,
+      .market-risk-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .announcement-list > div {
+        grid-template-columns: 72px minmax(0, 1fr);
+      }
+
       .confirmation-head {
         align-items: flex-start;
       }
@@ -2053,7 +2152,9 @@
       phaseNote: "自动识别竞价、盘中和尾盘阶段",
       phaseKey: "preopen",
       trendCache: {},
-      intradayCache: {}
+      intradayCache: {},
+      marketContext: null,
+      announcementCache: {}
     };
 
     function marketPhase(now = new Date()) {
@@ -2389,6 +2490,9 @@
       const dataQuality = dataQualityStatus(stock);
       const riskReward = riskRewardStatus(plan);
       const permission = phasePermission(hasHolding);
+      const market = marketRegimeStatus(stock);
+      const eventRisk = announcementRiskStatus(stock);
+      const portfolio = portfolioRiskStatus();
       if (stock.stRiskLevel === "高") return ["风险排除", "基本面/ST风险高", "不参与交易"];
       if (dataQuality.score < 65) return ["暂停策略", `数据可信度仅${dataQuality.score}分`, "等待真实行情、分钟线和日线恢复"];
       if (hasHolding) {
@@ -2396,12 +2500,16 @@
         if (stock.price >= plan.target2) return ["止盈触发", `到达第二目标 ${plan.target2}`, "分批兑现剩余仓位"];
         if (stock.price >= plan.target1) return ["减仓触发", `到达第一目标 ${plan.target1}`, "先兑现一部分"];
         if (plan.events?.target1 && stock.price <= plan.protectStop) return ["保护止盈触发", `一档止盈后回落至保护线 ${plan.protectStop}`, "处理剩余仓位，不上移目标价"];
+        if (eventRisk.level === "高") return ["公告风险预警", eventRisk.label, "先核查公告，再决定是否继续持有"];
         if (spike?.detected && spike.decayRisk >= 65) return ["回落减仓预警", `直线拉升后回落风险 ${spike.decayRisk}分`, "可先降低仓位保护利润"];
         return ["持有观察", `卖点 ${plan.target1}/${plan.target2} 未到`, `跌破 ${plan.stop} 执行止损`];
       }
       if (stock.price <= plan.stop) return ["计划失效", `跌破固定止损 ${plan.stop}`, "今日不再开仓"];
       if (spike?.detected && spike.decayRisk >= 65) return ["直线诱多风险", `冲高后回落风险 ${spike.decayRisk}分`, "不追高，等待重新企稳"];
+      if (eventRisk.level === "高") return ["事件风险禁入", eventRisk.label, "公告风险未解除前不新开仓"];
+      if (portfolio.level === "高") return ["组合风险禁入", `单票${portfolio.topWeight}% / 行业${portfolio.industryWeight}%`, "先降低集中度，再考虑新开仓"];
       if (!permission.allowed) return [permission.label, permission.reason, "保持固定计划，等待可交易时段"];
+      if (market.blockNewBuy) return ["市场环境禁入", `${market.label}，大盘均值${market.indexAvg}%`, "停止新开仓"];
       if (stock.price >= plan.buyLow && stock.price <= plan.buyHigh) {
         const quality = strategyQualityStatus(stock, plan);
         if (!riskReward.lowPass) return ["盈亏比不足", `低吸计划盈亏比仅${riskReward.low}`, "低于1.3，不执行"];
@@ -2410,6 +2518,7 @@
       }
       if (stock.price >= plan.breakout) {
         if (stock.price > plan.noChaseAbove) return ["今日错过", `已高于追价上限 ${plan.noChaseAbove}`, "不再移动买点追高"];
+        if (market.blockBreakout) return ["突破环境不足", `${market.label}${market.sector ? `，${market.sector.name}${market.sector.chg}%` : ""}`, "不执行突破追涨"];
         const quality = strategyQualityStatus(stock, plan);
         if (!riskReward.breakoutPass) return ["盈亏比不足", `突破计划盈亏比仅${riskReward.breakout}`, "低于1.5，不执行"];
         if (stock.net >= 0 && stock.score >= 70 && confirmation.count >= 3 && quality.score >= 75) return ["突破触发", `固定突破成立，质量${quality.score}分，${confirmation.count}/4项确认`, "按计划试仓"];
@@ -2457,6 +2566,14 @@
       if (minuteAge > 60) {
         score -= 15;
         reasons.push("分钟线未就绪");
+      }
+      if (!state.marketContext?.indices?.length) {
+        score -= 10;
+        reasons.push("市场板块数据未就绪");
+      }
+      if (!Array.isArray(stock.announcements)) {
+        score -= 10;
+        reasons.push("公告风险数据未就绪");
       }
       score = Math.max(0, Math.min(100, Math.round(score)));
       return {
@@ -2511,11 +2628,15 @@
       const theory = analyzeTheorySet(stock);
       const spike = analyzeStraightLine(stock);
       const rr = riskRewardStatus(plan);
+      const market = marketRegimeStatus(stock);
+      const eventRisk = announcementRiskStatus(stock);
       const theoryScore = theory ? Math.max(0, Math.min(15, (theory.totalScore + 5) * 1.5)) : 7.5;
       const rrScore = Math.min(15, Math.max(rr.low, rr.breakout) / 2 * 15);
-      const spikeScore = spike?.detected ? Math.max(0, 10 - spike.decayRisk / 10) : 7;
-      let score = data.score * .35 + (confirmation.count / confirmation.total) * 25 + theoryScore + rrScore + spikeScore;
+      const spikeScore = spike?.detected ? Math.max(0, 5 - spike.decayRisk / 20) : 3.5;
+      const marketScore = market.score / 10;
+      let score = data.score * .3 + (confirmation.count / confirmation.total) * 25 + theoryScore + rrScore + spikeScore + marketScore;
       if (stock.stRiskLevel === "高") score = Math.min(score, 25);
+      if (eventRisk.level === "高") score = Math.min(score, 30);
       score = Math.max(0, Math.min(100, Math.round(score)));
       return {
         score,
@@ -2523,6 +2644,8 @@
         confirmation,
         theory,
         spike,
+        market,
+        eventRisk,
         rr,
         label: score >= 80 ? "高质量候选" : score >= 65 ? "中等质量" : "低质量/等待",
         cls: score >= 80 ? "safe" : score >= 65 ? "warn" : "danger"
@@ -2629,7 +2752,7 @@
       if (hasHolding) position = actionableSell ? "按卖出信号降低仓位" : "按固定止损管理现有仓位";
       else if (actionableBuy && quality.score >= 80) position = "2-3成试仓";
       else if (actionableBuy && quality.score >= 65) position = "1成试仓";
-      const status = actionableBuy || actionableSell ? "执行信号" : /暂停|不足|风险|错过/.test(action[0]) ? "禁止执行" : "等待信号";
+      const status = actionableBuy || actionableSell ? "执行信号" : /暂停|不足|风险|错过|禁入|失效/.test(action[0]) ? "禁止执行" : "等待信号";
       return { plan, action, quality, accuracy, hasHolding, position, status };
     }
 
@@ -2919,6 +3042,195 @@
       `;
     }
 
+    async function fetchMarketContext() {
+      const indexFields = "f2,f3,f4,f6,f12,f14";
+      const sectorFields = "f12,f14,f2,f3,f62,f104,f105,f128,f136";
+      const [indexData, sectorData] = await Promise.all([
+        eastmoneyJsonp(`https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&secids=1.000001,0.399001,0.399006&fields=${indexFields}`),
+        eastmoneyJsonp(`https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=500&po=1&np=1&fltt=2&fid=f3&fs=m:90+t:2+f:!50&fields=${sectorFields}`, 10000)
+      ]);
+      const indices = (indexData?.data?.diff || []).map(row => ({
+        code: row.f12,
+        name: row.f14,
+        price: asNumber(row.f2),
+        chg: asNumber(row.f3),
+        amount: asNumber(row.f6)
+      }));
+      const sectors = (sectorData?.data?.diff || []).map((row, index) => ({
+        code: row.f12,
+        name: row.f14,
+        chg: asNumber(row.f3),
+        net: asNumber(row.f62),
+        upCount: asNumber(row.f104),
+        downCount: asNumber(row.f105),
+        leader: row.f128 || "--",
+        leaderChg: asNumber(row.f136),
+        rank: index + 1
+      }));
+      return { fetchedAt: Date.now(), indices, sectors };
+    }
+
+    async function getMarketContext() {
+      if (state.marketContext && Date.now() - state.marketContext.fetchedAt < 60 * 1000) return state.marketContext;
+      state.marketContext = await fetchMarketContext();
+      return state.marketContext;
+    }
+
+    function normalizeIndustryName(value) {
+      return String(value || "").replace(/[ⅠⅡⅢIV\s]/g, "").replace(/行业|板块/g, "").toLowerCase();
+    }
+
+    function fmtFundFlow(value) {
+      const amount = asNumber(value);
+      return `${amount >= 0 ? "+" : ""}${(amount / 100000000).toFixed(2)}亿`;
+    }
+
+    function sectorContextFor(stock) {
+      const sectors = state.marketContext?.sectors || [];
+      const target = normalizeIndustryName(stock.industry);
+      if (!target) return null;
+      return sectors.find(sector => {
+        const name = normalizeIndustryName(sector.name);
+        return name === target || name.includes(target) || target.includes(name);
+      }) || null;
+    }
+
+    function marketRegimeStatus(stock) {
+      const context = state.marketContext;
+      if (!context?.indices?.length) return { score: 50, label: "市场数据加载中", cls: "warn", blockBreakout: false, blockNewBuy: false, indexAvg: 0, sector: null };
+      const indexAvg = average(context.indices.map(index => index.chg));
+      const sector = sectorContextFor(stock);
+      let score = 50 + indexAvg * 10;
+      if (sector) {
+        score += sector.chg * 5;
+        score += sector.net > 0 ? 6 : sector.net < 0 ? -6 : 0;
+        score += sector.upCount > sector.downCount ? 4 : -4;
+      }
+      score = Math.max(0, Math.min(100, Math.round(score)));
+      const blockBreakout = indexAvg <= -1.2 || Boolean(sector && sector.chg <= -1.5);
+      const blockNewBuy = indexAvg <= -2.2 || Boolean(sector && sector.chg <= -3);
+      return {
+        score,
+        label: score >= 70 ? "市场与板块共振" : score >= 45 ? "市场中性/分化" : "市场环境偏弱",
+        cls: score >= 70 ? "safe" : score >= 45 ? "warn" : "danger",
+        blockBreakout,
+        blockNewBuy,
+        indexAvg: +indexAvg.toFixed(2),
+        sector
+      };
+    }
+
+    async function fetchStockAnnouncements(stock) {
+      const url = `https://np-anotice-stock.eastmoney.com/api/security/ann?sr=-1&page_size=12&page_index=1&ann_type=A&client_source=web&stock_list=${stock.code}`;
+      const response = await fetchJson(url, 10000);
+      return (response?.data?.list || []).map(item => ({
+        code: item.art_code,
+        title: item.title_ch || item.title || "公告",
+        date: String(item.notice_date || item.display_time || "").slice(0, 10),
+        columns: (item.columns || []).map(column => column.column_name).filter(Boolean)
+      }));
+    }
+
+    async function getStockAnnouncements(stock) {
+      const cached = state.announcementCache[stock.code];
+      if (cached && Date.now() - cached.fetchedAt < 10 * 60 * 1000) return cached.items;
+      const items = await fetchStockAnnouncements(stock);
+      state.announcementCache[stock.code] = { fetchedAt: Date.now(), items };
+      return items;
+    }
+
+    function announcementRiskStatus(stock) {
+      if (!Array.isArray(stock.announcements)) {
+        return { level: "未知", cls: "warn", risks: [], positives: [], recent: [], label: "公告数据尚未加载" };
+      }
+      const items = stock.announcements;
+      const riskPattern = /减持|立案|调查|问询|风险提示|退市|诉讼|冻结|质押|亏损|下修|解禁|处罚|停牌|终止|异常波动|监管/;
+      const positivePattern = /增持|回购|中标|预增|分红|业绩增长/;
+      const recent = items.filter(item => {
+        const timestamp = Date.parse(`${item.date}T00:00:00+08:00`);
+        return Number.isFinite(timestamp) && Date.now() - timestamp <= 30 * 24 * 60 * 60 * 1000;
+      });
+      const risks = recent.filter(item => riskPattern.test(item.title));
+      const positives = recent.filter(item => positivePattern.test(item.title));
+      return {
+        level: risks.length >= 2 ? "高" : risks.length === 1 ? "中" : "低",
+        cls: risks.length >= 2 ? "danger" : risks.length === 1 ? "warn" : "safe",
+        risks,
+        positives,
+        recent,
+        label: risks.length ? `近30日发现${risks.length}条风险公告` : "近30日未识别重大风险公告"
+      };
+    }
+
+    function portfolioRiskStatus() {
+      const positions = state.stocks.map(stock => {
+        const holding = readHolding(stock.code);
+        const shares = Number(holding.shares) || 0;
+        const cost = Number(holding.cost) || 0;
+        return {
+          stock,
+          shares,
+          cost,
+          value: shares * stock.price,
+          profit: shares && cost ? shares * (stock.price - cost) : 0
+        };
+      }).filter(position => position.shares > 0 && position.value > 0);
+      const totalValue = positions.reduce((sum, position) => sum + position.value, 0);
+      const totalProfit = positions.reduce((sum, position) => sum + position.profit, 0);
+      const topPosition = positions.reduce((top, position) => !top || position.value > top.value ? position : top, null);
+      const topWeight = totalValue && topPosition ? topPosition.value / totalValue * 100 : 0;
+      const industries = {};
+      positions.forEach(position => {
+        const industry = position.stock.industry || "未知行业";
+        industries[industry] = (industries[industry] || 0) + position.value;
+      });
+      const topIndustry = Object.entries(industries).sort((a, b) => b[1] - a[1])[0];
+      const industryWeight = totalValue && topIndustry ? topIndustry[1] / totalValue * 100 : 0;
+      const highRisk = topWeight > 45 || industryWeight > 60;
+      return {
+        positions,
+        totalValue,
+        totalProfit,
+        topPosition,
+        topWeight: +topWeight.toFixed(1),
+        topIndustry: topIndustry?.[0] || "--",
+        industryWeight: +industryWeight.toFixed(1),
+        level: highRisk ? "高" : topWeight > 35 || industryWeight > 45 ? "中" : "低",
+        cls: highRisk ? "danger" : topWeight > 35 || industryWeight > 45 ? "warn" : "safe"
+      };
+    }
+
+    function renderMarketRiskPanel(stock) {
+      const market = marketRegimeStatus(stock);
+      const eventRisk = announcementRiskStatus(stock);
+      const portfolio = portfolioRiskStatus();
+      const indices = state.marketContext?.indices || [];
+      const sector = market.sector;
+      const announcements = (stock.announcements || []).slice(0, 4);
+      return `
+        <section class="market-risk-panel">
+          <div class="market-risk-head">
+            <div>
+              <div class="section-title"><i data-lucide="landmark"></i>真实市场、板块与事件风控</div>
+              <span>大盘和行业环境参与策略过滤，公告与组合集中度优先于技术信号</span>
+            </div>
+            <span class="confirm-summary ${market.cls}">${market.label} · ${market.score}</span>
+          </div>
+          <div class="market-index-grid">
+            ${indices.map(index => `<div><span>${index.name}</span><b class="${index.chg >= 0 ? "price-up" : "price-down"}">${index.chg >= 0 ? "+" : ""}${index.chg}%</b><small>${index.price}</small></div>`).join("") || `<div><span>大盘指数</span><b>加载中</b><small>等待东财数据</small></div>`}
+            <div><span>${sector?.name || stock.industry || "行业板块"}</span><b class="${(sector?.chg || 0) >= 0 ? "price-up" : "price-down"}">${sector ? `${sector.chg >= 0 ? "+" : ""}${sector.chg}%` : "未匹配"}</b><small>${sector ? `排名${sector.rank} · 领涨${sector.leader}` : "等待行业匹配"}</small></div>
+          </div>
+          <div class="market-risk-grid">
+            <div><span>行业资金/广度</span><b>${sector ? `${fmtFundFlow(sector.net)} · ${sector.upCount}涨/${sector.downCount}跌` : "--"}</b><small>${market.blockBreakout ? "环境不支持突破追涨" : "未触发板块禁入"}</small></div>
+            <div><span>公告事件风险</span><b class="${eventRisk.cls}">${eventRisk.level} · ${eventRisk.label}</b><small>${eventRisk.risks[0]?.title || eventRisk.positives[0]?.title || "暂无关键公告标签"}</small></div>
+            <div><span>单票集中度</span><b class="${portfolio.topWeight > 45 ? "danger" : portfolio.topWeight > 35 ? "warn" : "safe"}">${portfolio.positions.length ? `${portfolio.topWeight}%` : "未填写持仓"}</b><small>${portfolio.topPosition ? portfolio.topPosition.stock.name : "填写成本与股数后计算"}</small></div>
+            <div><span>行业集中度</span><b class="${portfolio.cls}">${portfolio.positions.length ? `${portfolio.industryWeight}%` : "--"}</b><small>${portfolio.topIndustry} · 组合浮盈亏${Math.round(portfolio.totalProfit)}元</small></div>
+          </div>
+          ${announcements.length ? `<div class="announcement-list">${announcements.map(item => `<div><span>${item.date}</span><b>${item.title}</b></div>`).join("")}</div>` : ""}
+        </section>
+      `;
+    }
+
     function reviewHistoryKey() {
       return "stockAgentReviewHistory";
     }
@@ -3045,6 +3357,18 @@
         script.src = `${url}${separator}cb=${callback}&_=${Date.now()}`;
         document.body.appendChild(script);
       });
+    }
+
+    async function fetchJson(url, timeout = 8000) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeout);
+      try {
+        const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
+        if (!response.ok) throw new Error(`接口响应 ${response.status}`);
+        return await response.json();
+      } finally {
+        clearTimeout(timer);
+      }
     }
 
     function asNumber(value, fallback = 0) {
@@ -3308,14 +3632,19 @@
     async function attachMarketContext(code) {
       const stock = state.stocks.find(item => item.code === code);
       if (!stock) return;
-      const [trendResult, intradayResult] = await Promise.allSettled([
+      const [trendResult, intradayResult, marketResult, announcementResult] = await Promise.allSettled([
         getTrendData(stock),
-        getIntradayData(stock)
+        getIntradayData(stock),
+        getMarketContext(),
+        getStockAnnouncements(stock)
       ]);
       if (trendResult.status === "fulfilled") stock.trendData = trendResult.value;
       else console.warn("日线指标加载失败", trendResult.reason);
       if (intradayResult.status === "fulfilled") stock.intradayData = intradayResult.value;
       else console.warn("分钟行情加载失败", intradayResult.reason);
+      if (marketResult.status === "rejected") console.warn("市场板块加载失败", marketResult.reason);
+      if (announcementResult.status === "fulfilled") stock.announcements = announcementResult.value;
+      else console.warn("公告加载失败", announcementResult.reason);
       trackStrategySignal(stock);
       evaluateSignalLedger(stock);
       if (state.selected === code) render();
@@ -3770,14 +4099,19 @@
       if (!state.stocks.some(s => s.code === state.selected)) state.selected = state.stocks[0]?.code;
       const selectedStock = state.stocks.find(stock => stock.code === state.selected);
       if (selectedStock?.source === "东方财富") {
-        const [trendResult, intradayResult] = await Promise.allSettled([
+        const [trendResult, intradayResult, marketResult, announcementResult] = await Promise.allSettled([
           getTrendData(selectedStock),
-          getIntradayData(selectedStock)
+          getIntradayData(selectedStock),
+          getMarketContext(),
+          getStockAnnouncements(selectedStock)
         ]);
         if (trendResult.status === "fulfilled") selectedStock.trendData = trendResult.value;
         else console.warn("日线指标加载失败", trendResult.reason);
         if (intradayResult.status === "fulfilled") selectedStock.intradayData = intradayResult.value;
         else console.warn("分钟行情加载失败", intradayResult.reason);
+        if (marketResult.status === "rejected") console.warn("市场板块加载失败", marketResult.reason);
+        if (announcementResult.status === "fulfilled") selectedStock.announcements = announcementResult.value;
+        else console.warn("公告加载失败", announcementResult.reason);
         trackStrategySignal(selectedStock);
         evaluateSignalLedger(selectedStock);
       }
@@ -4164,6 +4498,7 @@
           <div class="quick-note ${topAlert[0] || ""}">${topAlert[1]} 主力净额 ${fmtMoney(stock.net)}。</div>
         </section>
         ${renderDailyStrategyPanel(stock)}
+        ${renderMarketRiskPanel(stock)}
         ${renderConfirmationPanel(stock)}
         ${renderStraightLinePanel(stock)}
         ${renderTheoryPanel(stock)}
