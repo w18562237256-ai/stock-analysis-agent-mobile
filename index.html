@@ -1234,6 +1234,86 @@
     .alert-item.warn { border-left-color: var(--yellow); background: rgba(255, 189, 62, .1); }
     .alert-item.danger { border-left-color: var(--red); background: rgba(255, 77, 99, .1); }
 
+    .holding-inputs {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin: 10px 0;
+    }
+
+    .holding-inputs label { color: var(--muted); font-size: 11px; }
+    .holding-inputs input { min-height: 38px; margin-top: 5px; }
+
+    .ledger-table {
+      display: grid;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .ledger-row {
+      display: grid;
+      grid-template-columns: 88px minmax(90px, 1fr) repeat(4, 62px);
+      gap: 7px;
+      align-items: center;
+      padding: 8px;
+      border: 1px solid #223043;
+      border-radius: 5px;
+      background: #0a1119;
+      font-size: 11px;
+    }
+
+    .ledger-row.header { color: var(--muted); background: transparent; }
+    .ledger-hit { color: #ff8794; }
+    .ledger-miss { color: #7feaab; }
+
+    .price-chart-panel {
+      margin-bottom: 14px;
+      border: 1px solid #2b4257;
+      border-radius: 8px;
+      background: #0d151e;
+      padding: 14px;
+    }
+
+    .chart-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .chart-switch { display: flex; gap: 4px; }
+    .chart-switch button {
+      min-height: 32px;
+      border: 1px solid #304157;
+      border-radius: 5px;
+      background: #111c28;
+      color: var(--muted);
+      padding: 0 11px;
+      cursor: pointer;
+    }
+    .chart-switch button.active { color: #fff; border-color: var(--blue); background: rgba(67, 165, 255, .14); }
+
+    .price-chart-wrap {
+      width: 100%;
+      aspect-ratio: 720 / 300;
+      min-height: 220px;
+      overflow: hidden;
+      border: 1px solid #1e2b3a;
+      background: #091018;
+    }
+
+    .price-chart-wrap svg { display: block; width: 100%; height: 100%; }
+
+    .chart-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
     .strategy {
       border-color: #1fa45a;
       background: linear-gradient(180deg, rgba(31, 164, 90, .12), rgba(16, 21, 31, .98));
@@ -2065,6 +2145,18 @@
         grid-template-columns: 1fr;
       }
 
+      .holding-inputs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+      .ledger-row {
+        grid-template-columns: 74px minmax(88px, 1fr) repeat(2, 52px);
+      }
+
+      .ledger-row > :nth-child(5),
+      .ledger-row > :nth-child(6) { display: none; }
+
+      .price-chart-panel { margin-bottom: 10px; padding: 10px; }
+      .price-chart-wrap { min-height: 240px; aspect-ratio: auto; }
+
       .action {
         min-height: 96px;
       }
@@ -2232,7 +2324,8 @@
       trendCache: {},
       intradayCache: {},
       marketContext: null,
-      announcementCache: {}
+      announcementCache: {},
+      chartMode: "daily"
     };
 
     function marketPhase(now = new Date()) {
@@ -2779,25 +2872,43 @@
     function evaluateSignalLedger(stock) {
       const ledger = readSignalLedger();
       const bars = stock.intradayData?.bars || [];
-      if (!bars.length) return;
+      const dailyBars = stock.trendData?.bars || [];
       let changed = false;
       ledger.forEach(item => {
-        if (item.code !== stock.code || item.date !== tradingDayKey()) return;
-        [5, 15, 30].forEach(minutes => {
-          if (item.outcomes?.[minutes]) return;
-          const target = item.ts + minutes * 60 * 1000;
-          if (Date.now() < target) return;
-          const bar = bars.find(candidate => minuteTimestamp(candidate.time) >= target);
-          const price = bar?.close || stock.price;
-          const change = item.price ? ((price / item.price) - 1) * 100 : 0;
-          item.outcomes ||= {};
-          item.outcomes[minutes] = {
-            price,
-            change: +change.toFixed(2),
-            hit: item.direction === "up" ? change > 0 : change < 0
-          };
-          changed = true;
-        });
+        if (item.code !== stock.code) return;
+        if (item.date === tradingDayKey() && bars.length) {
+          [5, 15, 30].forEach(minutes => {
+            if (item.outcomes?.[minutes]) return;
+            const target = item.ts + minutes * 60 * 1000;
+            if (Date.now() < target) return;
+            const bar = bars.find(candidate => minuteTimestamp(candidate.time) >= target);
+            const price = bar?.close || stock.price;
+            const change = item.price ? ((price / item.price) - 1) * 100 : 0;
+            item.outcomes ||= {};
+            item.outcomes[minutes] = {
+              price,
+              change: +change.toFixed(2),
+              hit: item.direction === "up" ? change > 0 : change < 0
+            };
+            changed = true;
+          });
+        }
+        if (dailyBars.length) {
+          const nextIndex = dailyBars.findIndex(bar => bar.date > item.date);
+          [["d1", nextIndex], ["d5", nextIndex >= 0 ? nextIndex + 4 : -1]].forEach(([key, index]) => {
+            if (item.outcomes?.[key] || index < 0 || !dailyBars[index]) return;
+            const price = dailyBars[index].close;
+            const change = item.price ? ((price / item.price) - 1) * 100 : 0;
+            item.outcomes ||= {};
+            item.outcomes[key] = {
+              price,
+              date: dailyBars[index].date,
+              change: +change.toFixed(2),
+              hit: item.direction === "up" ? change > 0 : change < 0
+            };
+            changed = true;
+          });
+        }
       });
       if (changed) saveSignalLedger(ledger);
     }
@@ -2817,6 +2928,40 @@
         averageChange: +averageChange.toFixed(2),
         reliable: evaluated.length >= 10
       };
+    }
+
+    function ledgerHorizonStats(horizon) {
+      const evaluated = readSignalLedger().filter(item => item.outcomes?.[horizon]);
+      const hits = evaluated.filter(item => item.outcomes[horizon].hit).length;
+      return {
+        samples: evaluated.length,
+        hits,
+        rate: evaluated.length ? Math.round(hits / evaluated.length * 100) : 0
+      };
+    }
+
+    function outcomeCell(outcome) {
+      if (!outcome) return `<span>待验证</span>`;
+      return `<span class="${outcome.hit ? "ledger-hit" : "ledger-miss"}">${outcome.change >= 0 ? "+" : ""}${outcome.change}% ${outcome.hit ? "✓" : "×"}</span>`;
+    }
+
+    function renderSignalLedgerPanel(stock) {
+      const ledger = readSignalLedger();
+      const rows = ledger.filter(item => item.code === stock.code).slice(0, 8);
+      const stats15 = ledgerHorizonStats(15);
+      const statsD1 = ledgerHorizonStats("d1");
+      const statsD5 = ledgerHorizonStats("d5");
+      const statText = (label, stats) => stats.samples >= 10 ? `${label}${stats.rate}%（${stats.samples}）` : `${label}样本${stats.samples}/10`;
+      return `
+        <div class="mini-card" style="margin-top:10px;">
+          <b>自动信号交易账本</b>
+          <span>${statText("15分钟", stats15)} · ${statText("次日", statsD1)} · ${statText("5日", statsD5)}。不足10个样本不认定准确率。</span>
+        </div>
+        ${rows.length ? `<div class="ledger-table">
+          <div class="ledger-row header"><span>日期</span><span>策略</span><span>15分钟</span><span>次日</span><span>5日</span><span>质量</span></div>
+          ${rows.map(item => `<div class="ledger-row"><span>${item.date.slice(5)}</span><b>${item.action}</b>${outcomeCell(item.outcomes?.[15])}${outcomeCell(item.outcomes?.d1)}${outcomeCell(item.outcomes?.d5)}<span>${item.quality}分</span></div>`).join("")}
+        </div>` : `<div class="alert-item" style="margin-top:8px;">当前股票尚未产生可执行信号；只有真实触发后才写入账本。</div>`}
+      `;
     }
 
     function buildDailyStrategy(stock) {
@@ -3493,6 +3638,7 @@
       const closes = bars.map(item => item.close);
       const holding = readHolding(stock.code);
       const hasHolding = Number(holding.shares) > 0 && Number(holding.cost) > 0;
+      const availableShares = Math.max(0, Number(holding.availableShares ?? holding.shares) || 0);
       const plan = getExecutionPlan(stock);
       const intradayBars = stock.intradayData?.bars?.filter(item => item.close > 0) || [];
       const latestMinute = intradayBars.at(-1);
@@ -3527,18 +3673,18 @@
 
       const daySell = +Math.min(plan.target1, Math.max(plan.breakout, plan.buyHigh + atrValue * .35)).toFixed(digits);
       const daySpread = plan.buyHigh ? ((daySell - plan.buyHigh) / plan.buyHigh) * 100 : 0;
-      let dayTState = hasHolding ? "等待到价" : "无底仓，不做日内T";
-      let dayTAction = hasHolding ? `冲高至${daySell}附近减，回到${plan.buyLow}-${plan.buyHigh}接回` : "A股当日买入不能当日卖出，需已有可卖底仓";
-      let dayTCls = hasHolding ? "warn" : "danger";
-      if (hasHolding && daySpread < .8) {
+      let dayTState = hasHolding && availableShares > 0 ? "等待到价" : "无可卖底仓，不做日内T";
+      let dayTAction = hasHolding && availableShares > 0 ? `可卖${availableShares}股；冲高至${daySell}附近减，回到${plan.buyLow}-${plan.buyHigh}接回` : "A股当日买入不能当日卖出，请填写可卖底仓";
+      let dayTCls = hasHolding && availableShares > 0 ? "warn" : "danger";
+      if (hasHolding && availableShares > 0 && daySpread < .8) {
         dayTState = "波差不足";
         dayTAction = `计划波差仅${daySpread.toFixed(1)}%，不够覆盖滑点与误差`;
         dayTCls = "danger";
-      } else if (hasHolding && stock.price >= daySell) {
+      } else if (hasHolding && availableShares > 0 && stock.price >= daySell) {
         dayTState = "日内T卖点观察";
         dayTAction = `只减可卖底仓的20%-30%，接回区固定为${plan.buyLow}-${plan.buyHigh}`;
         dayTCls = "safe";
-      } else if (hasHolding && stock.price >= plan.buyLow && stock.price <= plan.buyHigh && shortScore >= 0) {
+      } else if (hasHolding && availableShares > 0 && stock.price >= plan.buyLow && stock.price <= plan.buyHigh && shortScore >= 0) {
         dayTState = "日内T接回观察";
         dayTAction = "仅接回今天已减出的数量，不额外扩大总仓位";
         dayTCls = "safe";
@@ -3628,6 +3774,93 @@
           <div class="cycle-grid">
             ${analysis.items.map(item => `<div class="cycle-item ${item.cls}"><span>${item.name}</span><b>${item.state}</b><small>${item.detail}</small><em>${item.action}</em></div>`).join("")}
           </div>
+        </section>
+      `;
+    }
+
+    function renderPriceChart(stock) {
+      const plan = getExecutionPlan(stock);
+      const cycle = analyzeCycleStrategies(stock);
+      const width = 720;
+      const height = 300;
+      const left = 44;
+      const right = 690;
+      const top = 16;
+      const bottom = 260;
+      const mode = state.chartMode;
+      const daily = (stock.trendData?.bars || []).slice(-50);
+      const minutes = (stock.intradayData?.bars || []).filter(item => item.close > 0);
+      const source = mode === "intraday" ? minutes : daily;
+      if (source.length < 2) return `<section class="price-chart-panel"><div class="section-title"><i data-lucide="candlestick-chart"></i>价格图与策略标记</div><div class="code">行情数据加载中...</div></section>`;
+      const rawHighs = source.map(item => item.high || item.close);
+      const rawLows = source.map(item => item.low || item.close);
+      const levelValues = [plan.buyLow, plan.buyHigh, plan.stop, plan.target1, plan.target2].filter(Boolean);
+      let high = Math.max(...rawHighs, ...levelValues);
+      let low = Math.min(...rawLows, ...levelValues);
+      const padding = Math.max((high - low) * .08, stock.price * .005);
+      high += padding;
+      low -= padding;
+      const xAt = index => left + index * (right - left) / Math.max(1, source.length - 1);
+      const yAt = value => top + (high - value) / Math.max(.001, high - low) * (bottom - top);
+      const grids = Array.from({ length: 5 }, (_, index) => {
+        const value = high - (high - low) * index / 4;
+        const y = yAt(value);
+        return `<line x1="${left}" y1="${y}" x2="${right}" y2="${y}" stroke="#1c2a38" stroke-width="1"/><text x="4" y="${y + 4}" fill="#7990a5" font-size="10">${value.toFixed(priceDigits(stock.price))}</text>`;
+      }).join("");
+      const levels = [
+        ["低吸下", plan.buyLow, "#ff5b6b"],
+        ["低吸上", plan.buyHigh, "#ff8794"],
+        ["止损", plan.stop, "#2adf76"],
+        ["止盈1", plan.target1, "#ffbd3e"],
+        ["止盈2", plan.target2, "#e09c32"]
+      ].map(([label, value, color]) => {
+        const y = yAt(value);
+        return `<line x1="${left}" y1="${y}" x2="${right}" y2="${y}" stroke="${color}" stroke-width="1" stroke-dasharray="5 5" opacity=".8"/><text x="${right - 2}" y="${y - 3}" text-anchor="end" fill="${color}" font-size="10">${label} ${value}</text>`;
+      }).join("");
+      let plot = "";
+      if (mode === "intraday") {
+        const points = source.map((item, index) => `${xAt(index).toFixed(1)},${yAt(item.close).toFixed(1)}`).join(" ");
+        const avgPoints = source.filter(item => item.avgPrice > 0).map((item, index) => `${xAt(index).toFixed(1)},${yAt(item.avgPrice).toFixed(1)}`).join(" ");
+        plot = `<polyline points="${points}" fill="none" stroke="#43a5ff" stroke-width="2"/><polyline points="${avgPoints}" fill="none" stroke="#ffbd3e" stroke-width="1.2" opacity=".9"/>`;
+      } else {
+        const candleWidth = Math.max(2, Math.min(8, (right - left) / source.length * .55));
+        plot = source.map((item, index) => {
+          const x = xAt(index);
+          const up = item.close >= item.open;
+          const color = up ? "#ff596a" : "#28d76f";
+          const bodyTop = yAt(Math.max(item.open, item.close));
+          const bodyBottom = yAt(Math.min(item.open, item.close));
+          return `<line x1="${x}" y1="${yAt(item.high)}" x2="${x}" y2="${yAt(item.low)}" stroke="${color}"/><rect x="${x - candleWidth / 2}" y="${bodyTop}" width="${candleWidth}" height="${Math.max(1, bodyBottom - bodyTop)}" fill="${up ? color : "#091018"}" stroke="${color}"/>`;
+        }).join("");
+        const fullBars = stock.trendData.bars;
+        const maLine = period => source.map((item, index) => {
+          const fullIndex = fullBars.findIndex(bar => bar.date === item.date);
+          const value = average(fullBars.slice(Math.max(0, fullIndex - period + 1), fullIndex + 1).map(bar => bar.close));
+          return `${xAt(index).toFixed(1)},${yAt(value).toFixed(1)}`;
+        }).join(" ");
+        plot += `<polyline points="${maLine(5)}" fill="none" stroke="#ffd05b" stroke-width="1.2"/><polyline points="${maLine(20)}" fill="none" stroke="#8d7cff" stroke-width="1.2"/>`;
+      }
+      const ledger = readSignalLedger().filter(item => item.code === stock.code);
+      const marks = mode === "daily" ? ledger.map(item => {
+        const index = source.findIndex(bar => bar.date === item.date);
+        if (index < 0) return "";
+        const y = yAt(item.price);
+        const color = item.direction === "up" ? "#ff596a" : "#28d76f";
+        return `<circle cx="${xAt(index)}" cy="${y}" r="4" fill="${color}" stroke="#fff" stroke-width="1"><title>${item.date} ${item.action} @${item.price}</title></circle>`;
+      }).join("") : "";
+      const currentMarker = cycle?.topLevel === "高"
+        ? `<text x="${right - 8}" y="${Math.max(top + 12, yAt(stock.price) - 9)}" text-anchor="end" fill="#28d76f" font-size="12" font-weight="700">逃顶预警</text>`
+        : cycle?.bottomReady
+          ? `<text x="${right - 8}" y="${Math.min(bottom - 5, yAt(stock.price) + 16)}" text-anchor="end" fill="#ff596a" font-size="12" font-weight="700">抄底观察</text>`
+          : "";
+      return `
+        <section class="price-chart-panel">
+          <div class="chart-head">
+            <div class="section-title"><i data-lucide="candlestick-chart"></i>价格图与策略标记</div>
+            <div class="chart-switch"><button class="${mode === "daily" ? "active" : ""}" data-chart-mode="daily">日线</button><button class="${mode === "intraday" ? "active" : ""}" data-chart-mode="intraday">分时</button></div>
+          </div>
+          <div class="price-chart-wrap"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="${stock.name}${mode === "daily" ? "日线" : "分时"}策略图">${grids}${levels}${plot}${marks}${currentMarker}</svg></div>
+          <div class="chart-legend"><span>红：上涨/买入信号</span><span>绿：下跌/卖出信号</span><span>黄：MA5/分时均价</span><span>紫：MA20</span><span>虚线：当天锁定计划</span></div>
         </section>
       `;
     }
@@ -4186,7 +4419,7 @@
             <div class="mini-card"><b>固定卖点</b><span>第一止盈 ${trigger.takeProfit}；第二止盈 ${trigger.takeProfit2}；止损 ${trigger.stop}。</span></div>
             <div class="mini-card"><b>今日触发记录</b><span>${trigger.eventText}</span></div>
           </div>
-          <div class="target-inputs">
+          <div class="holding-inputs">
             <label>
               持仓成本
               <input class="holding-cost-input" data-code="${stock.code}" value="${holding.holding.cost ?? ""}" placeholder="${stock.price}" inputmode="decimal" />
@@ -4195,10 +4428,18 @@
               持仓股数
               <input class="holding-shares-input" data-code="${stock.code}" value="${holding.holding.shares ?? ""}" placeholder="100" inputmode="numeric" />
             </label>
+            <label>
+              可卖底仓
+              <input class="holding-available-input" data-code="${stock.code}" value="${holding.holding.availableShares ?? (holding.shares || "")}" placeholder="100" inputmode="numeric" />
+            </label>
+            <label>
+              今日已减
+              <input class="holding-reduced-input" data-code="${stock.code}" value="${holding.holding.todayReduced ?? ""}" placeholder="0" inputmode="numeric" />
+            </label>
           </div>
           <div class="target-result">
             <div class="fund-item"><span>浮盈浮亏</span><b class="${holding.profit >= 0 ? "price-up" : "price-down"}">${holding.shares ? `${Math.round(holding.profit)}元 / ${holding.profitPct.toFixed(1)}%` : "--"}</b></div>
-            <div class="fund-item"><span>计划风险</span><b>${holding.shares ? `${Math.round(holding.maxRisk)}元` : "--"}</b></div>
+            <div class="fund-item"><span>可卖 / 今日已减</span><b>${holding.shares ? `${holding.availableShares} / ${holding.todayReduced}股` : "--"}</b></div>
             <div class="fund-item"><span>持仓处理</span><b>${holding.plan}</b></div>
           </div>
           <div class="alert-list">
@@ -4221,6 +4462,7 @@
               }).join("")}
             </div>
           ` : ""}
+          ${renderSignalLedgerPanel(stock)}
         </div>
       `;
     }
@@ -4600,6 +4842,8 @@
       const holding = readHolding(stock.code);
       const cost = Number(holding.cost) || 0;
       const shares = Number(holding.shares) || 0;
+      const availableShares = Math.min(shares, Math.max(0, Number(holding.availableShares ?? shares) || 0));
+      const todayReduced = Math.max(0, Number(holding.todayReduced) || 0);
       const profit = cost > 0 && shares > 0 ? (stock.price - cost) * shares : 0;
       const profitPct = cost > 0 ? ((stock.price / cost - 1) * 100) : 0;
       const maxRisk = cost > 0 && shares > 0 ? Math.max(0, (cost - planLevels.stop) * shares) : 0;
@@ -4614,7 +4858,7 @@
             : stock.price <= planLevels.stop
               ? `已破固定止损${planLevels.stop}，优先控制风险。`
               : `卖点固定在${planLevels.target1}/${planLevels.target2}，止损${planLevels.stop}。`;
-      return { holding, cost, shares, profit, profitPct, maxRisk, plan };
+      return { holding, cost, shares, availableShares, todayReduced, profit, profitPct, maxRisk, plan };
     }
 
     function pageAlerts(stock) {
@@ -4726,6 +4970,7 @@
         </section>
         ${renderDailyStrategyPanel(stock)}
         ${renderCycleStrategyPanel(stock)}
+        ${renderPriceChart(stock)}
         ${renderMarketRiskPanel(stock)}
         ${renderConfirmationPanel(stock)}
         ${renderStraightLinePanel(stock)}
@@ -4846,14 +5091,26 @@
           render();
         });
       });
-      document.querySelectorAll(".holding-cost-input, .holding-shares-input").forEach(input => {
+      document.querySelectorAll("[data-chart-mode]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.chartMode = button.dataset.chartMode;
+          render();
+        });
+      });
+      document.querySelectorAll(".holding-cost-input, .holding-shares-input, .holding-available-input, .holding-reduced-input").forEach(input => {
         input.addEventListener("change", () => {
           const code = input.dataset.code;
           const costInput = document.querySelector(`.holding-cost-input[data-code="${code}"]`);
           const sharesInput = document.querySelector(`.holding-shares-input[data-code="${code}"]`);
+          const availableInput = document.querySelector(`.holding-available-input[data-code="${code}"]`);
+          const reducedInput = document.querySelector(`.holding-reduced-input[data-code="${code}"]`);
+          const shares = sharesInput?.value.trim() ? Number(sharesInput.value) : "";
+          const availableShares = availableInput?.value.trim() ? Math.max(0, Number(availableInput.value)) : shares;
           saveHolding(code, {
             cost: costInput?.value.trim() ? Number(costInput.value) : "",
-            shares: sharesInput?.value.trim() ? Number(sharesInput.value) : ""
+            shares,
+            availableShares: shares === "" ? "" : Math.min(Number(shares), availableShares),
+            todayReduced: reducedInput?.value.trim() ? Math.max(0, Number(reducedInput.value)) : 0
           });
           render();
         });
