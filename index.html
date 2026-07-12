@@ -1443,7 +1443,10 @@
     }
 
     .quick-board,
-    .mobile-dock {
+    .mobile-dock,
+    .mobile-stock-row,
+    .mobile-pool-manager,
+    .mobile-deep-analysis {
       display: none;
     }
 
@@ -1659,21 +1662,19 @@
       }
 
       .metrics {
-        display: flex;
-        overflow-x: auto;
-        gap: 8px;
-        margin: 0 -10px 10px;
-        padding: 0 10px 2px;
-        scrollbar-width: none;
-        overscroll-behavior-x: contain;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+        margin: 0 0 10px;
+        padding: 0;
+        overflow: visible;
       }
 
-      .metrics::-webkit-scrollbar { display: none; }
+      .metrics > :nth-child(n+4) { display: none; }
 
       .metric {
-        flex: 0 0 112px;
         min-height: 56px;
-        padding: 9px 10px;
+        padding: 8px;
       }
 
       .metric strong {
@@ -1686,6 +1687,102 @@
         flex-direction: column;
         gap: 10px;
       }
+
+      .layout > .panel:first-child,
+      .layout > .panel:last-child {
+        display: none;
+      }
+
+      #mainAnalysis { min-width: 0; width: 100%; }
+
+      .mobile-stock-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 38px;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+
+      .mobile-stock-strip {
+        display: flex;
+        gap: 6px;
+        min-width: 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+        scroll-snap-type: x proximity;
+      }
+
+      .mobile-stock-strip::-webkit-scrollbar { display: none; }
+
+      .mobile-stock-chip {
+        flex: 0 0 auto;
+        min-height: 38px;
+        max-width: 132px;
+        border: 1px solid #28384b;
+        border-radius: 6px;
+        background: #111a24;
+        color: #b9c9d9;
+        padding: 0 10px;
+        font-size: 12px;
+        font-weight: 800;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        scroll-snap-align: start;
+      }
+
+      .mobile-stock-chip.active {
+        border-color: #43a5ff;
+        background: #15314a;
+        color: #fff;
+      }
+
+      .mobile-pool-toggle {
+        width: 38px;
+        min-height: 38px;
+        border: 1px solid #30445a;
+        border-radius: 6px;
+        background: #12202d;
+        color: #a9c7df;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .mobile-pool-toggle svg { width: 17px; height: 17px; }
+
+      .mobile-pool-manager {
+        grid-column: 1 / -1;
+        padding: 6px;
+        border: 1px solid #29394b;
+        border-radius: 6px;
+        background: #0e1721;
+      }
+
+      .mobile-pool-manager.open { display: grid; gap: 5px; }
+
+      .mobile-pool-item {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        gap: 8px;
+        align-items: center;
+        min-height: 38px;
+        padding: 0 7px 0 9px;
+        border-bottom: 1px solid #1d2a38;
+        font-size: 12px;
+      }
+
+      .mobile-pool-item:last-child { border-bottom: 0; }
+      .mobile-pool-item b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+      .mobile-pool-remove {
+        width: 30px;
+        height: 30px;
+        border: 0;
+        background: transparent;
+        color: #ff8794;
+      }
+
+      .mobile-pool-remove svg { width: 16px; height: 16px; }
 
       .panel {
         border-radius: 8px;
@@ -1739,6 +1836,26 @@
       .layout > .panel:first-child .disclaimer {
         display: none;
       }
+
+      .mobile-deep-analysis {
+        display: block;
+        margin-bottom: 10px;
+        border: 1px solid #2a3a4c;
+        border-radius: 7px;
+        background: #0e1721;
+      }
+
+      .mobile-deep-analysis > summary {
+        min-height: 44px;
+        padding: 12px;
+        color: #cde8ff;
+        font-size: 13px;
+        font-weight: 900;
+        cursor: pointer;
+      }
+
+      .mobile-deep-analysis[open] > summary { border-bottom: 1px solid #263648; }
+      .mobile-deep-body { padding: 8px; }
 
       .quick-board {
         display: block;
@@ -2325,7 +2442,8 @@
       intradayCache: {},
       marketContext: null,
       announcementCache: {},
-      chartMode: "daily"
+      chartMode: "daily",
+      mobilePoolOpen: false
     };
 
     function marketPhase(now = new Date()) {
@@ -4509,6 +4627,35 @@
       `;
     }
 
+    function renderMobileStockStrip() {
+      return `
+        <div class="mobile-stock-row">
+          <div class="mobile-stock-strip" aria-label="股票快速切换">
+            ${state.stocks.map(item => `<button class="mobile-stock-chip ${item.code === state.selected ? "active" : ""}" data-mobile-stock="${item.code}">${item.name} ${item.chg >= 0 ? "+" : ""}${item.chg}%</button>`).join("")}
+          </div>
+          <button class="mobile-pool-toggle" data-mobile-pool-toggle title="管理监控池"><i data-lucide="list-settings"></i></button>
+          <div class="mobile-pool-manager ${state.mobilePoolOpen ? "open" : ""}">
+            ${state.stocks.map(item => `<div class="mobile-pool-item"><b>${item.name} ${item.code}</b><span class="${item.chg >= 0 ? "price-up" : "price-down"}">${item.price}</span><button class="mobile-pool-remove" data-mobile-remove="${item.code}" title="删除"><i data-lucide="x"></i></button></div>`).join("")}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderMobileDeepAnalysis(stock) {
+      return `
+        <details class="mobile-deep-analysis">
+          <summary>深度分析：趋势、板块、盘口与理论</summary>
+          <div class="mobile-deep-body">
+            ${renderCycleStrategyPanel(stock)}
+            ${renderMarketRiskPanel(stock)}
+            ${renderConfirmationPanel(stock)}
+            ${renderStraightLinePanel(stock)}
+            ${renderTheoryPanel(stock)}
+          </div>
+        </details>
+      `;
+    }
+
     function riskTagClass(level) {
       if (level === "高") return "danger";
       if (level === "中") return "warn";
@@ -4980,6 +5127,7 @@
       const signalClass = riskSignal || sellSignal ? "sell" : waitSignal ? "wait" : "buy";
       const compactView = state.simpleMode && window.matchMedia("(max-width: 640px)").matches;
       document.getElementById("mainAnalysis").innerHTML = `
+        ${renderMobileStockStrip()}
         <section class="quick-board">
           <div class="quick-head">
             <div>
@@ -5011,12 +5159,14 @@
           <div class="quick-note ${topAlert[0] || ""}">${topAlert[1]} 主力净额 ${fmtMoney(stock.net)}。</div>
         </section>
         ${renderDailyStrategyPanel(stock)}
-        ${renderCycleStrategyPanel(stock)}
         ${renderPriceChart(stock)}
-        ${renderMarketRiskPanel(stock)}
-        ${renderConfirmationPanel(stock)}
-        ${renderStraightLinePanel(stock)}
-        ${renderTheoryPanel(stock)}
+        ${compactView ? "" : `
+          ${renderCycleStrategyPanel(stock)}
+          ${renderMarketRiskPanel(stock)}
+          ${renderConfirmationPanel(stock)}
+          ${renderStraightLinePanel(stock)}
+          ${renderTheoryPanel(stock)}
+        `}
         ${compactView ? `
           <section class="compact-plan">
             <div class="mini-card"><b>${triggers.signal[0]}</b>${triggers.signal[1]}<br><span class="code">${triggers.signal[2]}</span></div>
@@ -5024,6 +5174,7 @@
             <div class="mini-card"><b>仓位与风控</b>${triggers.position} · 跌破 ${triggers.stop} 当日计划失效</div>
           </section>
           ${renderMobilePositionPanel(stock)}
+          ${renderMobileDeepAnalysis(stock)}
         ` : `
         <article class="agent-card">
           <div class="stock-head">
@@ -5124,6 +5275,22 @@
     }
 
     function bindToolInputs() {
+      document.querySelectorAll("[data-mobile-stock]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.selected = button.dataset.mobileStock;
+          render();
+          attachMarketContext(state.selected);
+        });
+      });
+      document.querySelectorAll("[data-mobile-pool-toggle]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.mobilePoolOpen = !state.mobilePoolOpen;
+          render();
+        });
+      });
+      document.querySelectorAll("[data-mobile-remove]").forEach(button => {
+        button.addEventListener("click", () => removeCode(button.dataset.mobileRemove));
+      });
       document.querySelectorAll("[data-reset-plan]").forEach(button => {
         button.addEventListener("click", () => resetExecutionPlan(button.dataset.resetPlan));
       });
