@@ -1150,6 +1150,16 @@
       padding: 12px;
     }
 
+    .target-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .target-head .section-title { margin-bottom: 0; }
+
     .target-inputs {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2247,6 +2257,8 @@
         grid-template-columns: 1fr;
       }
 
+      .target-head { align-items: flex-start; flex-direction: column; }
+
       .action-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;
@@ -2442,6 +2454,7 @@
       intradayCache: {},
       marketContext: null,
       announcementCache: {},
+      forecastCache: {},
       chartMode: "daily",
       mobilePoolOpen: false
     };
@@ -3498,6 +3511,39 @@
       return items;
     }
 
+    async function fetchProfitForecast(stock) {
+      const filter = encodeURIComponent(`(SECURITY_CODE="${stock.code}")`);
+      const url = `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_WEB_RESPREDICT&columns=WEB_RESPREDICT&filter=${filter}&pageNumber=1&pageSize=1&sortTypes=-1&sortColumns=RATING_ORG_NUM&source=WEB&client=WEB`;
+      const response = await eastmoneyJsonp(url, 10000, "callback");
+      const row = response?.result?.data?.[0];
+      if (!row) return null;
+      const estimates = [1, 2, 3, 4].map(index => ({
+        year: asNumber(row[`YEAR${index}`]),
+        mark: row[`YEAR_MARK${index}`] || "",
+        eps: asNumber(row[`EPS${index}`])
+      })).filter(item => item.year && item.eps && item.mark === "E");
+      return {
+        fetchedAt: Date.now(),
+        institutions: asNumber(row.RATING_ORG_NUM),
+        buy: asNumber(row.RATING_BUY_NUM),
+        add: asNumber(row.RATING_ADD_NUM),
+        neutral: asNumber(row.RATING_NEUTRAL_NUM),
+        reduce: asNumber(row.RATING_REDUCE_NUM),
+        sell: asNumber(row.RATING_SALE_NUM),
+        targetMin: asNumber(row.DEC_AIMPRICEMIN),
+        targetMax: asNumber(row.DEC_AIMPRICEMAX),
+        estimates
+      };
+    }
+
+    async function getProfitForecast(stock) {
+      const cached = state.forecastCache[stock.code];
+      if (cached && Date.now() - cached.fetchedAt < 30 * 60 * 1000) return cached.data;
+      const data = await fetchProfitForecast(stock);
+      state.forecastCache[stock.code] = { fetchedAt: Date.now(), data };
+      return data;
+    }
+
     function announcementRiskStatus(stock) {
       if (!Array.isArray(stock.announcements)) {
         return { level: "未知", cls: "warn", risks: [], positives: [], recent: [], label: "公告数据尚未加载" };
@@ -3687,7 +3733,7 @@
       return "0";
     }
 
-    function eastmoneyJsonp(url, timeout = 8000) {
+    function eastmoneyJsonp(url, timeout = 8000, callbackParam = "cb") {
       return new Promise((resolve, reject) => {
         const callback = `em_cb_${Date.now()}_${Math.random().toString(16).slice(2)}`;
         const script = document.createElement("script");
@@ -3713,7 +3759,7 @@
         };
 
         const separator = url.includes("?") ? "&" : "?";
-        script.src = `${url}${separator}cb=${callback}&_=${Date.now()}`;
+        script.src = `${url}${separator}${callbackParam}=${callback}&_=${Date.now()}`;
         document.body.appendChild(script);
       });
     }
@@ -4231,11 +4277,12 @@
     async function attachMarketContext(code) {
       const stock = state.stocks.find(item => item.code === code);
       if (!stock) return;
-      const [trendResult, intradayResult, marketResult, announcementResult] = await Promise.allSettled([
+      const [trendResult, intradayResult, marketResult, announcementResult, forecastResult] = await Promise.allSettled([
         getTrendData(stock),
         getIntradayData(stock),
         getMarketContext(),
-        getStockAnnouncements(stock)
+        getStockAnnouncements(stock),
+        getProfitForecast(stock)
       ]);
       if (trendResult.status === "fulfilled") stock.trendData = trendResult.value;
       else console.warn("日线指标加载失败", trendResult.reason);
@@ -4244,6 +4291,8 @@
       if (marketResult.status === "rejected") console.warn("市场板块加载失败", marketResult.reason);
       if (announcementResult.status === "fulfilled") stock.announcements = announcementResult.value;
       else console.warn("公告加载失败", announcementResult.reason);
+      if (forecastResult.status === "fulfilled") stock.forecastData = forecastResult.value;
+      else console.warn("机构盈利预测加载失败", forecastResult.reason);
       trackStrategySignal(stock);
       evaluateSignalLedger(stock);
       if (state.selected === code) render();
@@ -4438,22 +4487,6 @@
       return n.toFixed(2);
     }
 
-    function targetKey(code) {
-      return `stockAgentTarget:${code}`;
-    }
-
-    function readTargetConfig(code) {
-      try {
-        return JSON.parse(localStorage.getItem(targetKey(code)) || "{}");
-      } catch {
-        return {};
-      }
-    }
-
-    function saveTargetConfig(code, config) {
-      localStorage.setItem(targetKey(code), JSON.stringify(config));
-    }
-
     function inferredProfitYi(stock) {
       if (stock.totalMarketCap > 0 && stock.peTtm > 0) {
         return stock.totalMarketCap / stock.peTtm / 100000000;
@@ -4472,63 +4505,76 @@
     }
 
     function targetValuation(stock) {
-      const saved = readTargetConfig(stock.code);
+      const forecast = stock.forecastData;
       const inferred = inferredProfitYi(stock);
-      const forecastProfit = Number.isFinite(Number(saved.profit)) && Number(saved.profit) > 0
-        ? Number(saved.profit)
-        : +(inferred * 1.15).toFixed(2);
-      const targetPe = Number.isFinite(Number(saved.pe)) && Number(saved.pe) > 0
-        ? Number(saved.pe)
-        : defaultTargetPe(stock);
       const totalShares = stock.price > 0 && stock.totalMarketCap > 0
         ? stock.totalMarketCap / stock.price
         : 0;
-      const targetMarketCap = forecastProfit * targetPe * 100000000;
-      const targetPrice = totalShares > 0 ? targetMarketCap / totalShares : 0;
+      const estimate = forecast?.estimates?.[0] || null;
+      const hasTargetRange = forecast?.targetMin > 0 && forecast?.targetMax > 0;
+      const forecastProfit = estimate && totalShares > 0
+        ? estimate.eps * totalShares / 100000000
+        : inferred * 1.15;
+      const targetPrice = hasTargetRange
+        ? (forecast.targetMin + forecast.targetMax) / 2
+        : estimate?.eps > 0
+          ? estimate.eps * defaultTargetPe(stock)
+          : stock.price > 0 && inferred > 0
+            ? stock.price * 1.15
+            : 0;
+      const targetPe = estimate?.eps > 0 && targetPrice > 0 ? targetPrice / estimate.eps : defaultTargetPe(stock);
+      const targetMarketCap = totalShares > 0 ? targetPrice * totalShares : forecastProfit * targetPe * 100000000;
       const upside = stock.price > 0 && targetPrice > 0 ? ((targetPrice / stock.price - 1) * 100) : 0;
-      const conservative = targetPrice * 0.85;
-      const optimistic = targetPrice * 1.18;
+      const conservative = hasTargetRange ? forecast.targetMin : targetPrice * 0.85;
+      const optimistic = hasTargetRange ? forecast.targetMax : targetPrice * 1.18;
       return {
-        saved,
+        forecast,
+        estimate,
+        totalShares,
         inferred,
-        forecastProfit,
-        targetPe,
+        forecastProfit: +forecastProfit.toFixed(2),
+        targetPe: +targetPe.toFixed(1),
         targetMarketCap,
         targetPrice,
         upside,
         conservative,
-        optimistic
+        optimistic,
+        source: forecast
+          ? hasTargetRange ? "东财机构一致预期 + 研报目标区间" : "东财机构一致预期EPS"
+          : "无机构盈利预测，TTM回退估算"
       };
     }
 
     function renderTargetPanel(stock) {
       const target = targetValuation(stock);
-      const sourceText = target.saved.profit || target.saved.pe
-        ? "使用你填写的研报假设"
-        : "未填写研报时，按当前TTM利润上浮15%估算";
       const upsideClass = target.upside >= 0 ? "price-up" : "price-down";
+      const forecast = target.forecast;
+      const updateTime = forecast?.fetchedAt ? new Date(forecast.fetchedAt).toLocaleTimeString("zh-CN", { hour12: false }) : "--";
       return `
         <div class="target-box">
-          <div class="section-title"><i data-lucide="crosshair"></i>研报利润目标价测算</div>
-          <div class="target-inputs">
-            <label>
-              研报预测净利润（亿元）
-              <input class="target-profit-input" data-code="${stock.code}" value="${target.saved.profit ?? ""}" placeholder="${target.forecastProfit || "--"}" inputmode="decimal" />
-            </label>
-            <label>
-              目标PE
-              <input class="target-pe-input" data-code="${stock.code}" value="${target.saved.pe ?? ""}" placeholder="${target.targetPe || "--"}" inputmode="decimal" />
-            </label>
+          <div class="target-head">
+            <div class="section-title"><i data-lucide="crosshair"></i>机构盈利预测与目标价</div>
+            <span class="risk-tag ${forecast ? "safe" : "warn"}">${forecast ? `东财自动更新 ${updateTime}` : "暂无机构覆盖"}</span>
           </div>
           <div class="target-result">
-            <div class="fund-item"><span>目标价</span><b class="${upsideClass}">${target.targetPrice ? target.targetPrice.toFixed(2) : "--"}</b></div>
+            <div class="fund-item"><span>中性目标价</span><b class="${upsideClass}">${target.targetPrice ? target.targetPrice.toFixed(2) : "--"}</b></div>
             <div class="fund-item"><span>空间</span><b class="${upsideClass}">${target.targetPrice ? `${target.upside.toFixed(1)}%` : "--"}</b></div>
-            <div class="fund-item"><span>目标市值</span><b>${fmtCap(target.targetMarketCap)}</b></div>
+            <div class="fund-item"><span>机构目标区间</span><b>${target.conservative ? `${target.conservative.toFixed(2)}-${target.optimistic.toFixed(2)}` : "--"}</b></div>
           </div>
+          <div class="fundamental-grid" style="margin-top:8px;">
+            <div class="fund-item"><span>覆盖机构</span><b>${forecast ? `${forecast.institutions}家` : "0家"}</b></div>
+            <div class="fund-item"><span>买入 / 增持</span><b>${forecast ? `${forecast.buy} / ${forecast.add}` : "--"}</b></div>
+            <div class="fund-item"><span>${target.estimate?.year || "预测"} EPS</span><b>${target.estimate ? target.estimate.eps.toFixed(3) : "--"}</b></div>
+            <div class="fund-item"><span>隐含目标PE</span><b>${target.estimate ? `${target.targetPe}倍` : "--"}</b></div>
+          </div>
+          ${forecast?.estimates?.length ? `<div class="announcement-list">${forecast.estimates.map(item => {
+            const profit = target.totalShares > 0 ? item.eps * target.totalShares / 100000000 : 0;
+            return `<div><span>${item.year}E</span><b>一致EPS ${item.eps.toFixed(3)} · 预测净利润 ${profit ? `${profit.toFixed(2)}亿元` : "--"}</b></div>`;
+          }).join("")}</div>` : ""}
           <ol style="margin-top:10px;">
-            <li>${sourceText}；当前反推TTM净利润约${target.inferred ? target.inferred.toFixed(2) : "--"}亿元。</li>
+            <li>数据来源：${target.source}；当前反推TTM净利润约${target.inferred ? target.inferred.toFixed(2) : "--"}亿元。</li>
             <li>保守目标价约${target.conservative ? target.conservative.toFixed(2) : "--"}，中性目标价约${target.targetPrice ? target.targetPrice.toFixed(2) : "--"}，乐观目标价约${target.optimistic ? target.optimistic.toFixed(2) : "--"}。</li>
-            <li>目标价只解决“值多少钱”的问题，买卖仍要结合竞价/盘中/尾盘信号和风险线。</li>
+            <li>目标区间来自机构覆盖样本，不等于保证到达；买卖仍以实时策略和风险线为准。</li>
           </ol>
         </div>
       `;
@@ -4644,13 +4690,14 @@
     function renderMobileDeepAnalysis(stock) {
       return `
         <details class="mobile-deep-analysis">
-          <summary>深度分析：趋势、板块、盘口与理论</summary>
+          <summary>深度分析：趋势、基本面、研报与盘口</summary>
           <div class="mobile-deep-body">
             ${renderCycleStrategyPanel(stock)}
             ${renderMarketRiskPanel(stock)}
             ${renderConfirmationPanel(stock)}
             ${renderStraightLinePanel(stock)}
             ${renderTheoryPanel(stock)}
+            ${renderFundamentalPanel(stock)}
           </div>
         </details>
       `;
@@ -4757,11 +4804,12 @@
       if (!state.stocks.some(s => s.code === state.selected)) state.selected = state.stocks[0]?.code;
       const selectedStock = state.stocks.find(stock => stock.code === state.selected);
       if (selectedStock?.source === "东方财富") {
-        const [trendResult, intradayResult, marketResult, announcementResult] = await Promise.allSettled([
+        const [trendResult, intradayResult, marketResult, announcementResult, forecastResult] = await Promise.allSettled([
           getTrendData(selectedStock),
           getIntradayData(selectedStock),
           getMarketContext(),
-          getStockAnnouncements(selectedStock)
+          getStockAnnouncements(selectedStock),
+          getProfitForecast(selectedStock)
         ]);
         if (trendResult.status === "fulfilled") selectedStock.trendData = trendResult.value;
         else console.warn("日线指标加载失败", trendResult.reason);
@@ -4770,6 +4818,8 @@
         if (marketResult.status === "rejected") console.warn("市场板块加载失败", marketResult.reason);
         if (announcementResult.status === "fulfilled") selectedStock.announcements = announcementResult.value;
         else console.warn("公告加载失败", announcementResult.reason);
+        if (forecastResult.status === "fulfilled") selectedStock.forecastData = forecastResult.value;
+        else console.warn("机构盈利预测加载失败", forecastResult.reason);
         trackStrategySignal(selectedStock);
         evaluateSignalLedger(selectedStock);
       }
@@ -5259,21 +5309,6 @@
       }).join("");
     }
 
-    function bindTargetInputs() {
-      document.querySelectorAll(".target-profit-input, .target-pe-input").forEach(input => {
-        input.addEventListener("change", () => {
-          const code = input.dataset.code;
-          const profitInput = document.querySelector(`.target-profit-input[data-code="${code}"]`);
-          const peInput = document.querySelector(`.target-pe-input[data-code="${code}"]`);
-          const config = {};
-          if (profitInput?.value.trim()) config.profit = Number(profitInput.value);
-          if (peInput?.value.trim()) config.pe = Number(peInput.value);
-          saveTargetConfig(code, config);
-          render();
-        });
-      });
-    }
-
     function bindToolInputs() {
       document.querySelectorAll("[data-mobile-stock]").forEach(button => {
         button.addEventListener("click", () => {
@@ -5349,7 +5384,6 @@
       renderWatchlist();
       renderMain();
       renderCandidates();
-      bindTargetInputs();
       bindToolInputs();
       updateRefreshControls();
       lucide.createIcons();
