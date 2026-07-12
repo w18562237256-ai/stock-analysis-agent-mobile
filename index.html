@@ -872,6 +872,68 @@
     .theory-chip.danger { color: #7feaab; background: rgba(40, 215, 111, .1); }
     .theory-chip.warn { color: #ffd583; background: rgba(255, 189, 62, .1); }
 
+    .cycle-panel {
+      margin-bottom: 14px;
+      border: 1px solid #315066;
+      border-radius: 8px;
+      background: #101a23;
+      padding: 14px;
+    }
+
+    .cycle-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .cycle-head .section-title { margin-bottom: 3px; }
+    .cycle-head > div > span { color: var(--muted); font-size: 12px; }
+
+    .cycle-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .cycle-item {
+      min-height: 112px;
+      padding: 11px;
+      border: 1px solid #293b4d;
+      border-left: 3px solid #6f7f8e;
+      border-radius: 6px;
+      background: #0c151e;
+    }
+
+    .cycle-item.safe { border-left-color: var(--red); }
+    .cycle-item.warn { border-left-color: var(--yellow); }
+    .cycle-item.danger { border-left-color: var(--green); }
+
+    .cycle-item span,
+    .cycle-item small {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .cycle-item b {
+      display: block;
+      margin: 7px 0 6px;
+      font-size: 15px;
+      overflow-wrap: anywhere;
+    }
+
+    .cycle-item em {
+      display: block;
+      margin-top: 7px;
+      color: #c5d8e8;
+      font-size: 12px;
+      font-style: normal;
+      font-weight: 800;
+    }
+
     .spike-panel {
       margin-bottom: 14px;
       border: 1px solid #384357;
@@ -1924,6 +1986,22 @@
         grid-template-columns: 1fr;
       }
 
+      .cycle-panel {
+        margin-bottom: 10px;
+        padding: 12px;
+      }
+
+      .cycle-head > div > span { display: none; }
+
+      .cycle-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .cycle-item {
+        min-height: 0;
+        padding: 9px;
+      }
+
       .spike-panel {
         margin-bottom: 10px;
         padding: 12px;
@@ -2493,6 +2571,7 @@
       const market = marketRegimeStatus(stock);
       const eventRisk = announcementRiskStatus(stock);
       const portfolio = portfolioRiskStatus();
+      const cycle = analyzeCycleStrategies(stock);
       if (stock.stRiskLevel === "高") return ["风险排除", "基本面/ST风险高", "不参与交易"];
       if (dataQuality.score < 65) return ["暂停策略", `数据可信度仅${dataQuality.score}分`, "等待真实行情、分钟线和日线恢复"];
       if (hasHolding) {
@@ -2501,6 +2580,7 @@
         if (stock.price >= plan.target1) return ["减仓触发", `到达第一目标 ${plan.target1}`, "先兑现一部分"];
         if (plan.events?.target1 && stock.price <= plan.protectStop) return ["保护止盈触发", `一档止盈后回落至保护线 ${plan.protectStop}`, "处理剩余仓位，不上移目标价"];
         if (eventRisk.level === "高") return ["公告风险预警", eventRisk.label, "先核查公告，再决定是否继续持有"];
+        if (cycle?.topLevel === "高") return ["逃顶减仓预警", cycle.topHits.map(item => item.text).join("、"), "分批兑现，不一次清仓；跌破MA5继续减"];
         if (spike?.detected && spike.decayRisk >= 65) return ["回落减仓预警", `直线拉升后回落风险 ${spike.decayRisk}分`, "可先降低仓位保护利润"];
         return ["持有观察", `卖点 ${plan.target1}/${plan.target2} 未到`, `跌破 ${plan.stop} 执行止损`];
       }
@@ -2675,7 +2755,7 @@
     function trackStrategySignal(stock) {
       const plan = getExecutionPlan(stock);
       const action = executionSignal(stock, plan);
-      if (!/低吸触发|突破触发|回落减仓预警|止损触发|减仓触发|止盈触发|保护止盈触发|直线诱多风险/.test(action[0])) return;
+      if (!/低吸触发|突破触发|回落减仓预警|逃顶减仓预警|止损触发|减仓触发|止盈触发|保护止盈触发|直线诱多风险/.test(action[0])) return;
       const ledger = readSignalLedger();
       const id = `${tradingDayKey()}-${stock.code}-${action[0]}`;
       if (ledger.some(item => item.id === id)) return;
@@ -2747,7 +2827,7 @@
       const holding = readHolding(stock.code);
       const hasHolding = Number(holding.cost) > 0 && Number(holding.shares) > 0;
       const actionableBuy = /低吸触发|突破触发/.test(action[0]);
-      const actionableSell = /止损触发|减仓触发|止盈触发|保护止盈触发|回落减仓预警/.test(action[0]);
+      const actionableSell = /止损触发|减仓触发|止盈触发|保护止盈触发|回落减仓预警|逃顶减仓预警/.test(action[0]);
       let position = "0成，继续观察";
       if (hasHolding) position = actionableSell ? "按卖出信号降低仓位" : "按固定止损管理现有仓位";
       else if (actionableBuy && quality.score >= 80) position = "2-3成试仓";
@@ -3403,6 +3483,153 @@
       if (!values.length) return 0;
       const mean = average(values);
       return Math.sqrt(average(values.map(value => (value - mean) ** 2)));
+    }
+
+    function analyzeCycleStrategies(stock) {
+      const trend = stock.trendData;
+      const bars = trend?.bars || [];
+      if (bars.length < 70) return null;
+      const digits = priceDigits(stock.price);
+      const closes = bars.map(item => item.close);
+      const holding = readHolding(stock.code);
+      const hasHolding = Number(holding.shares) > 0 && Number(holding.cost) > 0;
+      const plan = getExecutionPlan(stock);
+      const intradayBars = stock.intradayData?.bars?.filter(item => item.close > 0) || [];
+      const latestMinute = intradayBars.at(-1);
+      const atrValue = plan.atr || stock.price * trend.atr14 / 100;
+      const pct = (current, previous) => previous ? ((current - previous) / previous) * 100 : 0;
+      const ma5Before = average(closes.slice(-10, -5));
+      const ma20Before = average(closes.slice(-25, -5));
+      const ma60Before = average(closes.slice(-70, -10));
+      const shortMomentum = pct(closes.at(-1), closes.at(-6));
+      const mediumMomentum = pct(closes.at(-1), closes.at(-21));
+      const longMomentum = pct(closes.at(-1), closes.at(-61));
+
+      let shortScore = 0;
+      if (stock.price > trend.ma5 && trend.ma5 > trend.ma10) shortScore += 2;
+      else if (stock.price < trend.ma5 && trend.ma5 < trend.ma10) shortScore -= 2;
+      if (trend.ma5 > ma5Before) shortScore += 1;
+      else shortScore -= 1;
+      if (shortMomentum > 2) shortScore += 1;
+      else if (shortMomentum < -2) shortScore -= 1;
+      const shortState = shortScore >= 3 ? "短期上升" : shortScore <= -3 ? "短期下降" : shortScore > 0 ? "短期偏强震荡" : shortScore < 0 ? "短期偏弱震荡" : "短期横盘";
+
+      let longScore = 0;
+      if (trend.ma20 > trend.ma60) longScore += 2;
+      else longScore -= 2;
+      if (trend.ma20 > ma20Before) longScore += 1;
+      else longScore -= 1;
+      if (trend.ma60 > ma60Before) longScore += 1;
+      else longScore -= 1;
+      if (longMomentum > 8) longScore += 1;
+      else if (longMomentum < -8) longScore -= 1;
+      const longState = longScore >= 3 ? "长期上升" : longScore <= -3 ? "长期下降" : "长期震荡筑底";
+
+      const daySell = +Math.min(plan.target1, Math.max(plan.breakout, plan.buyHigh + atrValue * .35)).toFixed(digits);
+      const daySpread = plan.buyHigh ? ((daySell - plan.buyHigh) / plan.buyHigh) * 100 : 0;
+      let dayTState = hasHolding ? "等待到价" : "无底仓，不做日内T";
+      let dayTAction = hasHolding ? `冲高至${daySell}附近减，回到${plan.buyLow}-${plan.buyHigh}接回` : "A股当日买入不能当日卖出，需已有可卖底仓";
+      let dayTCls = hasHolding ? "warn" : "danger";
+      if (hasHolding && daySpread < .8) {
+        dayTState = "波差不足";
+        dayTAction = `计划波差仅${daySpread.toFixed(1)}%，不够覆盖滑点与误差`;
+        dayTCls = "danger";
+      } else if (hasHolding && stock.price >= daySell) {
+        dayTState = "日内T卖点观察";
+        dayTAction = `只减可卖底仓的20%-30%，接回区固定为${plan.buyLow}-${plan.buyHigh}`;
+        dayTCls = "safe";
+      } else if (hasHolding && stock.price >= plan.buyLow && stock.price <= plan.buyHigh && shortScore >= 0) {
+        dayTState = "日内T接回观察";
+        dayTAction = "仅接回今天已减出的数量，不额外扩大总仓位";
+        dayTCls = "safe";
+      }
+
+      const waveBuyLow = +Math.min(trend.ma10, trend.ma20).toFixed(digits);
+      const waveBuyHigh = +Math.max(trend.ma10, trend.ma20).toFixed(digits);
+      const waveSell = +Math.min(trend.high20, trend.bollUpper).toFixed(digits);
+      const waveAllowed = longScore >= 0 && marketRegimeStatus(stock).score >= 40;
+      let waveState = !hasHolding ? "建仓后启用" : waveAllowed ? "波段区间有效" : "下降趋势，暂停做T";
+      let waveAction = !hasHolding
+        ? "当前只看结构，不把波段T当成首次建仓信号"
+        : waveAllowed
+          ? `回撤${waveBuyLow}-${waveBuyHigh}止跌再加，接近${waveSell}分批减`
+          : `MA20/MA60趋势未改善，不用补仓摊低成本`;
+      let waveCls = waveAllowed ? "warn" : "danger";
+      if (hasHolding && waveAllowed && stock.price >= waveSell) {
+        waveState = "波段T减仓区";
+        waveAction = "减仓后等日线回撤，不在高位当天追接";
+        waveCls = "safe";
+      }
+
+      const previous20 = bars.slice(-21, -1);
+      const priorHigh20 = Math.max(...previous20.map(item => item.high));
+      const currentBar = bars.at(-1);
+      const avgVolume20 = average(previous20.map(item => item.volume));
+      const topSignals = [
+        { pass: trend.rsi14 >= 72, text: `RSI ${trend.rsi14}` },
+        { pass: trend.position20 >= 85, text: `20日高位${trend.position20}%` },
+        { pass: stock.price >= trend.ma20 * (1 + Math.max(8, trend.atr14 * 2) / 100), text: "偏离MA20过大" },
+        { pass: currentBar.volume > avgVolume20 * 1.5 && stock.closePos < 65, text: "放量滞涨" },
+        { pass: stock.net < 0 && stock.mainNetRatio < 0, text: "主力流出" },
+        { pass: currentBar.high > priorHigh20 && stock.price < priorHigh20, text: "突破失败" }
+      ];
+      const topHits = topSignals.filter(item => item.pass);
+      const topLevel = topHits.length >= 3 ? "高" : topHits.length === 2 ? "中" : "低";
+      const topState = topLevel === "高" ? "逃顶减仓预警" : topLevel === "中" ? "顶部风险观察" : "未见顶部共振";
+      const topAction = topLevel === "高"
+        ? "已有仓位分批兑现，不一次清仓；跌破MA5再继续减"
+        : topLevel === "中" ? "停止追高，观察量价是否继续背离" : "按原止盈和止损计划管理";
+
+      const nearLowerBand = stock.price <= trend.bollLower * 1.02;
+      const volumeContraction = currentBar.volume < avgVolume20 * .85;
+      const bottomSignals = [
+        { pass: trend.rsi14 <= 32, text: `RSI ${trend.rsi14}` },
+        { pass: trend.position20 <= 15, text: `20日低位${trend.position20}%` },
+        { pass: nearLowerBand, text: "接近布林下轨" },
+        { pass: volumeContraction, text: "缩量杀跌" },
+        { pass: stock.net > 0 && stock.mainNetRatio > 0, text: "资金回流" }
+      ];
+      const bottomHits = bottomSignals.filter(item => item.pass);
+      const reversalConfirmed = Boolean(latestMinute?.avgPrice > 0 && stock.change5m > 0 && stock.price >= latestMinute.avgPrice && stock.mainNetRatio >= 0);
+      const bottomReady = bottomHits.length >= 3 && reversalConfirmed && longScore > -3;
+      const bottomState = bottomReady ? "抄底试仓观察" : bottomHits.length >= 3 ? "超跌但未止跌" : "未到抄底区";
+      const bottomAction = bottomReady
+        ? "只允许小仓试错，仍以固定止损为准，不把反弹当反转"
+        : bottomHits.length >= 3 ? "等待站回分时均价、5分钟转强和资金回流" : "不提前猜底，不因连续下跌补仓";
+
+      const items = [
+        { name: "短期趋势", state: shortState, cls: shortScore >= 2 ? "safe" : shortScore <= -2 ? "danger" : "warn", detail: `5日${shortMomentum >= 0 ? "+" : ""}${shortMomentum.toFixed(1)}% · MA5斜率${trend.ma5 >= ma5Before ? "向上" : "向下"}`, action: shortScore >= 2 ? "顺势持有，回撤只看固定计划" : shortScore <= -2 ? "不追涨，反弹优先控仓" : "等待方向选择" },
+        { name: "长期趋势", state: longState, cls: longScore >= 2 ? "safe" : longScore <= -2 ? "danger" : "warn", detail: `20日${mediumMomentum >= 0 ? "+" : ""}${mediumMomentum.toFixed(1)}% · 60日${longMomentum >= 0 ? "+" : ""}${longMomentum.toFixed(1)}%`, action: longScore >= 2 ? "波段仓可沿MA20管理" : longScore <= -2 ? "反弹按反弹处理，禁止补仓摊平" : "控制中线仓位" },
+        { name: "日内T（已有底仓）", state: dayTState, cls: dayTCls, detail: `固定卖出参考${daySell} · 接回${plan.buyLow}-${plan.buyHigh}`, action: dayTAction },
+        { name: "波段T（日线级）", state: waveState, cls: waveCls, detail: `MA10/20区${waveBuyLow}-${waveBuyHigh} · 上沿${waveSell}`, action: waveAction },
+        { name: "逃顶策略", state: topState, cls: topLevel === "高" ? "danger" : topLevel === "中" ? "warn" : "safe", detail: topHits.length ? topHits.map(item => item.text).join(" · ") : "高位、背离、量价和资金均未共振", action: topAction },
+        { name: "抄底策略", state: bottomState, cls: bottomReady ? "safe" : bottomHits.length >= 3 ? "warn" : "danger", detail: `${bottomHits.length}/5项超跌 · ${reversalConfirmed ? "已见止跌确认" : "尚无止跌确认"}`, action: bottomAction }
+      ];
+      return { items, shortScore, longScore, topLevel, bottomReady, topHits, bottomHits };
+    }
+
+    function renderCycleStrategyPanel(stock) {
+      const analysis = analyzeCycleStrategies(stock);
+      if (!analysis) {
+        return `
+          <section class="cycle-panel">
+            <div class="cycle-head"><div class="section-title"><i data-lucide="chart-no-axes-combined"></i>多周期交易策略</div><span class="confirm-summary warn">正在加载日线和分钟线</span></div>
+          </section>
+        `;
+      }
+      const summary = analysis.topLevel === "高" ? "顶部风险优先" : analysis.bottomReady ? "超跌止跌观察" : analysis.shortScore >= 2 && analysis.longScore >= 2 ? "长短趋势共振" : "周期信号分化";
+      const summaryCls = analysis.topLevel === "高" ? "danger" : analysis.shortScore >= 2 && analysis.longScore >= 2 ? "safe" : "warn";
+      return `
+        <section class="cycle-panel">
+          <div class="cycle-head">
+            <div><div class="section-title"><i data-lucide="chart-no-axes-combined"></i>多周期交易策略</div><span>日内T仅限已有可卖底仓；逃顶和抄底都要求多指标共振</span></div>
+            <span class="confirm-summary ${summaryCls}">${summary}</span>
+          </div>
+          <div class="cycle-grid">
+            ${analysis.items.map(item => `<div class="cycle-item ${item.cls}"><span>${item.name}</span><b>${item.state}</b><small>${item.detail}</small><em>${item.action}</em></div>`).join("")}
+          </div>
+        </section>
+      `;
     }
 
     function analyzeTheorySet(stock) {
@@ -4498,6 +4725,7 @@
           <div class="quick-note ${topAlert[0] || ""}">${topAlert[1]} 主力净额 ${fmtMoney(stock.net)}。</div>
         </section>
         ${renderDailyStrategyPanel(stock)}
+        ${renderCycleStrategyPanel(stock)}
         ${renderMarketRiskPanel(stock)}
         ${renderConfirmationPanel(stock)}
         ${renderStraightLinePanel(stock)}
