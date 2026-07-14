@@ -2579,7 +2579,8 @@
       forecastCache: {},
       researchCache: {},
       chartMode: "daily",
-      mobilePoolOpen: false
+      mobilePoolOpen: false,
+      mobileDeepOpen: false
     };
 
     function marketPhase(now = new Date()) {
@@ -4935,7 +4936,7 @@
 
     function renderMobileDeepAnalysis(stock) {
       return `
-        <details class="mobile-deep-analysis">
+        <details class="mobile-deep-analysis" ${state.mobileDeepOpen ? "open" : ""}>
           <summary>深度分析：趋势、基本面、研报与盘口</summary>
           <div class="mobile-deep-body">
             ${renderCycleStrategyPanel(stock)}
@@ -5030,7 +5031,7 @@
       state.refreshing = true;
       state.refreshIn = 20;
       state.dataSource = "正在拉取东方财富行情...";
-      render();
+      updateRefreshControls();
       try {
         const eastmoneyStocks = await fetchEastmoneyStocks(codes);
         state.stocks = withModeScores(eastmoneyStocks).sort((a, b) => b.score - a.score);
@@ -5137,9 +5138,10 @@
     }
 
     function updateRefreshControls() {
+      const mobileReading = isMobileDeepReading();
       const text = document.getElementById("refreshCountdown");
       const btn = document.getElementById("quickRefreshBtn");
-      if (text) text.textContent = state.refreshing ? "刷新中" : `刷新 ${state.refreshIn}s`;
+      if (text) text.textContent = state.refreshing ? "刷新中" : mobileReading ? "阅读中" : `刷新 ${state.refreshIn}s`;
       if (btn) btn.classList.toggle("refreshing", state.refreshing);
 
       const phaseName = document.getElementById("livePhaseName");
@@ -5149,7 +5151,7 @@
       const liveBtn = document.getElementById("liveRefreshBtn");
       const liveText = document.getElementById("liveRefreshText");
       if (phaseName) phaseName.textContent = state.phaseName;
-      if (phaseNote) phaseNote.textContent = `${state.phaseNote} · 20秒自动更新`;
+      if (phaseNote) phaseNote.textContent = `${state.phaseNote} · ${mobileReading ? "深度阅读时暂停自动更新" : "20秒自动更新"}`;
       if (liveText) liveText.textContent = state.refreshing ? "刷新中" : "立即刷新";
       if (liveBtn) liveBtn.classList.toggle("refreshing", state.refreshing);
       if (!freshness || !freshText) return;
@@ -5167,12 +5169,20 @@
       } else if (!state.lastSuccessAt) {
         freshness.classList.add("stale");
         freshText.textContent = "等待首次实时行情";
+      } else if (mobileReading) {
+        if (age > 45) freshness.classList.add("stale");
+        freshText.textContent = `阅读中已暂停 ${age} 秒 · 可点刷新手动更新`;
       } else if (age > 45) {
         freshness.classList.add("stale");
         freshText.textContent = `行情已 ${age} 秒未更新 · 建议刷新`;
       } else {
         freshText.textContent = `实时 ${new Date(state.lastSuccessAt).toLocaleTimeString("zh-CN", { hour12: false })} · 下次 ${state.refreshIn}s`;
       }
+    }
+
+    function isMobileDeepReading() {
+      return window.matchMedia("(max-width: 640px)").matches
+        && Boolean(document.querySelector(".mobile-deep-analysis[open]"));
     }
 
     function scrollAnalysisIntoView() {
@@ -5635,6 +5645,14 @@
       document.querySelectorAll("[data-mobile-remove]").forEach(button => {
         button.addEventListener("click", () => removeCode(button.dataset.mobileRemove));
       });
+      const mobileDeepAnalysis = document.querySelector(".mobile-deep-analysis");
+      if (mobileDeepAnalysis) {
+        mobileDeepAnalysis.addEventListener("toggle", () => {
+          state.mobileDeepOpen = mobileDeepAnalysis.open;
+          if (!mobileDeepAnalysis.open) state.refreshIn = Math.max(state.refreshIn, 5);
+          updateRefreshControls();
+        });
+      }
       document.querySelectorAll("[data-reset-plan]").forEach(button => {
         button.addEventListener("click", () => resetExecutionPlan(button.dataset.resetPlan));
       });
@@ -5689,6 +5707,8 @@
     }
 
     function render() {
+      const preserveMobileReading = isMobileDeepReading();
+      const readingScrollY = preserveMobileReading ? window.scrollY : 0;
       renderMetrics();
       renderWatchlist();
       renderMain();
@@ -5696,6 +5716,9 @@
       bindToolInputs();
       updateRefreshControls();
       lucide.createIcons();
+      if (preserveMobileReading) {
+        requestAnimationFrame(() => window.scrollTo({ top: readingScrollY, behavior: "auto" }));
+      }
     }
 
     document.getElementById("refreshBtn").addEventListener("click", addCodesFromInput);
@@ -5713,7 +5736,7 @@
     setInterval(() => {
       const editing = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName);
       const phaseChanged = syncMarketPhase();
-      if (document.body.classList.contains("locked") || document.hidden || state.refreshing || editing) {
+      if (document.body.classList.contains("locked") || document.hidden || state.refreshing || editing || isMobileDeepReading()) {
         updateRefreshControls();
         return;
       }
@@ -5727,10 +5750,10 @@
     }, 1000);
     document.addEventListener("visibilitychange", () => {
       const age = state.lastSuccessAt ? Date.now() - state.lastSuccessAt : Infinity;
-      if (!document.hidden && !document.body.classList.contains("locked") && age > 25000) generate();
+      if (!document.hidden && !document.body.classList.contains("locked") && !isMobileDeepReading() && age > 25000) generate();
     });
     window.addEventListener("online", () => {
-      if (!document.body.classList.contains("locked")) generate();
+      if (!document.body.classList.contains("locked") && !isMobileDeepReading()) generate();
     });
     state.codes = loadSavedCodes();
     loadSimpleMode();
