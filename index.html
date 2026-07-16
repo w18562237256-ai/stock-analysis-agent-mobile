@@ -1971,16 +1971,15 @@
         background: #0e1721;
       }
 
-      .mobile-deep-analysis > summary {
+      .mobile-deep-title {
         min-height: 44px;
         padding: 12px;
         color: #cde8ff;
         font-size: 13px;
         font-weight: 900;
-        cursor: pointer;
+        border-bottom: 1px solid #263648;
       }
 
-      .mobile-deep-analysis[open] > summary { border-bottom: 1px solid #263648; }
       .mobile-deep-body { padding: 8px; }
 
       .quick-board {
@@ -2579,8 +2578,7 @@
       forecastCache: {},
       researchCache: {},
       chartMode: "daily",
-      mobilePoolOpen: false,
-      mobileDeepOpen: false
+      mobilePoolOpen: false
     };
 
     function marketPhase(now = new Date()) {
@@ -4936,8 +4934,8 @@
 
     function renderMobileDeepAnalysis(stock) {
       return `
-        <details class="mobile-deep-analysis" ${state.mobileDeepOpen ? "open" : ""}>
-          <summary>深度分析：趋势、基本面、研报与盘口</summary>
+        <section class="mobile-deep-analysis" aria-label="深度分析">
+          <div class="mobile-deep-title">深度分析：趋势、基本面、研报与盘口</div>
           <div class="mobile-deep-body">
             ${renderCycleStrategyPanel(stock)}
             ${renderMarketRiskPanel(stock)}
@@ -4946,7 +4944,7 @@
             ${renderTheoryPanel(stock)}
             ${renderFundamentalPanel(stock)}
           </div>
-        </details>
+        </section>
       `;
     }
 
@@ -5181,8 +5179,11 @@
     }
 
     function isMobileDeepReading() {
-      return window.matchMedia("(max-width: 640px)").matches
-        && Boolean(document.querySelector(".mobile-deep-analysis[open]"));
+      if (!window.matchMedia("(max-width: 640px)").matches) return false;
+      const panel = document.querySelector(".mobile-deep-analysis");
+      if (!panel) return false;
+      const rect = panel.getBoundingClientRect();
+      return rect.top < window.innerHeight - 72 && rect.bottom > 72;
     }
 
     function scrollAnalysisIntoView() {
@@ -5645,14 +5646,6 @@
       document.querySelectorAll("[data-mobile-remove]").forEach(button => {
         button.addEventListener("click", () => removeCode(button.dataset.mobileRemove));
       });
-      const mobileDeepAnalysis = document.querySelector(".mobile-deep-analysis");
-      if (mobileDeepAnalysis) {
-        mobileDeepAnalysis.addEventListener("toggle", () => {
-          state.mobileDeepOpen = mobileDeepAnalysis.open;
-          if (!mobileDeepAnalysis.open) state.refreshIn = Math.max(state.refreshIn, 5);
-          updateRefreshControls();
-        });
-      }
       document.querySelectorAll("[data-reset-plan]").forEach(button => {
         button.addEventListener("click", () => resetExecutionPlan(button.dataset.resetPlan));
       });
