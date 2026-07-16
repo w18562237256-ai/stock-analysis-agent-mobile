@@ -2880,12 +2880,15 @@
       if (!state.lastSuccessAt || stock.source !== "东方财富") return plan;
       const holding = readHolding(stock.code);
       const hasHolding = Number(holding.cost) > 0 && Number(holding.shares) > 0;
+      const stopStatus = stopLossStatus(stock, plan);
       const checks = {
         buyZone: stock.price >= plan.buyLow && stock.price <= plan.buyHigh,
         breakout: stock.price >= plan.breakout,
         target1: hasHolding && stock.price >= plan.target1,
         target2: hasHolding && stock.price >= plan.target2,
-        stop: stock.price <= plan.stop
+        stopProbe: stopStatus.currentBelow,
+        stop: stopStatus.confirmed,
+        stopReclaim: Boolean(plan.events?.stopProbe) && stock.price > plan.stop
       };
       let changed = false;
       Object.entries(checks).forEach(([name, hit]) => {
@@ -2918,24 +2921,33 @@
       const eventRisk = announcementRiskStatus(stock);
       const portfolio = portfolioRiskStatus();
       const cycle = analyzeCycleStrategies(stock);
+      const stopStatus = stopLossStatus(stock, plan);
+      const recovery = recoveryEntryStatus(stock, plan);
       if (stock.stRiskLevel === "高") return ["风险排除", "基本面/ST风险高", "不参与交易"];
       if (dataQuality.score < 65) return ["暂停策略", `数据可信度仅${dataQuality.score}分`, "等待真实行情、分钟线和日线恢复"];
       if (hasHolding) {
-        if (stock.price <= plan.stop) return ["止损触发", `跌破固定止损 ${plan.stop}`, "优先执行风控"];
+        if (stopStatus.confirmed) return ["止损确认", `${stopStatus.reason}，确认线 ${plan.stop}`, "分批降低仓位，保留重新转强的观察权"];
+        if (stopStatus.currentBelow) return ["跌破观察", `首次跌破 ${plan.stop}，连续${stopStatus.consecutive}/3分钟`, `硬止损 ${stopStatus.hardStop}；未确认前先减风险仓，不一键清仓`];
         if (stock.price >= plan.target2) return ["止盈触发", `到达第二目标 ${plan.target2}`, "分批兑现剩余仓位"];
         if (stock.price >= plan.target1) return ["减仓触发", `到达第一目标 ${plan.target1}`, "先兑现一部分"];
         if (plan.events?.target1 && stock.price <= plan.protectStop) return ["保护止盈触发", `一档止盈后回落至保护线 ${plan.protectStop}`, "处理剩余仓位，不上移目标价"];
+        if (stopStatus.reclaimed && confirmation.count >= 2) return ["假跌破收复", `已重新站回止损线 ${plan.stop}`, "停止继续减仓，观察量价能否延续"];
         if (eventRisk.level === "高") return ["公告风险预警", eventRisk.label, "先核查公告，再决定是否继续持有"];
         if (cycle?.topLevel === "高") return ["逃顶减仓预警", cycle.topHits.map(item => item.text).join("、"), "分批兑现，不一次清仓；跌破MA5继续减"];
         if (spike?.detected && spike.decayRisk >= 65) return ["回落减仓预警", `直线拉升后回落风险 ${spike.decayRisk}分`, "可先降低仓位保护利润"];
-        return ["持有观察", `卖点 ${plan.target1}/${plan.target2} 未到`, `跌破 ${plan.stop} 执行止损`];
+        return ["持有观察", `卖点 ${plan.target1}/${plan.target2} 未到`, `首次跌破 ${plan.stop} 观察，确认后再执行风控`];
       }
-      if (stock.price <= plan.stop) return ["计划失效", `跌破固定止损 ${plan.stop}`, "今日不再开仓"];
+      if (stopStatus.confirmed) return ["计划失效", `${stopStatus.reason}，确认跌破 ${plan.stop}`, "暂不接下跌，等待重新收复关键位"];
+      if (stopStatus.currentBelow) return ["跌破观察", `价格暂破 ${plan.stop}，连续${stopStatus.consecutive}/3分钟`, `未到硬止损 ${stopStatus.hardStop} 前不把一次下影线当趋势反转`];
       if (spike?.detected && spike.decayRisk >= 65) return ["直线诱多风险", `冲高后回落风险 ${spike.decayRisk}分`, "不追高，等待重新企稳"];
       if (eventRisk.level === "高") return ["事件风险禁入", eventRisk.label, "公告风险未解除前不新开仓"];
       if (portfolio.level === "高") return ["组合风险禁入", `单票${portfolio.topWeight}% / 行业${portfolio.industryWeight}%`, "先降低集中度，再考虑新开仓"];
       if (!permission.allowed) return [permission.label, permission.reason, "保持固定计划，等待可交易时段"];
       if (market.blockNewBuy) return ["市场环境禁入", `${market.label}，大盘均值${market.indexAvg}%`, "停止新开仓"];
+      if (recovery.ready) {
+        if (recovery.nearLimit) return ["强势重启观察", `${recovery.reason}，现价已接近涨停`, "不追封板，次日只看开板承接或回踩确认"];
+        return ["止损后重启", recovery.reason, `仅小仓重新跟随，跌回 ${recovery.cancelBelow} 取消重启`];
+      }
       if (stock.price >= plan.buyLow && stock.price <= plan.buyHigh) {
         const quality = strategyQualityStatus(stock, plan);
         if (!riskReward.lowPass) return ["盈亏比不足", `低吸计划盈亏比仅${riskReward.low}`, "低于1.3，不执行"];
@@ -2955,7 +2967,7 @@
     }
 
     function planEventText(plan) {
-      const labels = { buyZone: "低吸区", breakout: "突破", target1: "一档止盈", target2: "二档止盈", stop: "止损" };
+      const labels = { buyZone: "低吸区", breakout: "突破", target1: "一档止盈", target2: "二档止盈", stopProbe: "止损观察", stop: "止损确认", stopReclaim: "重新收复" };
       const items = Object.entries(plan.events || {}).map(([name, event]) => {
         const time = new Date(event.time).toLocaleTimeString("zh-CN", { hour12: false, hour: "2-digit", minute: "2-digit" });
         return `${labels[name]} ${time}@${event.price}`;
@@ -3023,6 +3035,78 @@
         breakoutStop,
         lowPass: lowReward / lowRisk >= 1.3,
         breakoutPass: breakoutReward / breakoutRisk >= 1.5
+      };
+    }
+
+    function stopLossStatus(stock, plan) {
+      const bars = stock.intradayData?.bars?.filter(bar => bar.close > 0) || [];
+      const recent = bars.slice(-3);
+      let belowCount = 0;
+      for (let index = recent.length - 1; index >= 0; index -= 1) {
+        if (recent[index].close > plan.stop) break;
+        belowCount += 1;
+      }
+      const atr = Number(plan.atr) || stock.price * Math.max(1.5, Number(plan.atrPct) || 3) / 100;
+      const digits = priceDigits(stock.price);
+      const hardStop = +Math.max(.01, plan.stop - atr * .4).toFixed(digits);
+      const currentBelow = stock.price <= plan.stop;
+      const latest = bars.at(-1);
+      const weakTape = stock.net < 0 || stock.mainNetRatio < 0 || (latest?.avgPrice > 0 && latest.close < latest.avgPrice);
+      const closingConfirm = ["late_session", "closing", "closed"].includes(state.phaseKey) && currentBelow;
+      const hardBreak = currentBelow && stock.price <= hardStop;
+      const sustained = currentBelow && belowCount >= 3 && weakTape;
+      const confirmed = hardBreak || sustained || closingConfirm;
+      const reclaimed = Boolean(plan.events?.stopProbe) && stock.price > plan.stop;
+      const reason = hardBreak
+        ? `已跌到硬止损 ${hardStop}`
+        : closingConfirm
+          ? "尾盘仍未收复止损线"
+          : sustained
+            ? "连续3分钟位于止损线下且资金/均价偏弱"
+            : "仅为盘中首次跌破，尚未确认";
+      return { currentBelow, confirmed, hardBreak, hardStop, consecutive: Math.max(0, belowCount), reclaimed, reason };
+    }
+
+    function latestRecentStop(stock) {
+      const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
+      return readSignalLedger().find(item => item.code === stock.code && item.ts >= cutoff && /止损确认|止损触发/.test(item.action)) || null;
+    }
+
+    function recentShockDay(stock) {
+      const bars = stock.trendData?.bars || [];
+      const start = Math.max(1, bars.length - 8);
+      for (let index = bars.length - 1; index >= start; index -= 1) {
+        const previous = bars[index - 1];
+        const current = bars[index];
+        const change = previous?.close ? (current.close / previous.close - 1) * 100 : 0;
+        if (change <= -8.5) return { ...current, change };
+      }
+      return null;
+    }
+
+    function recoveryEntryStatus(stock, plan) {
+      const stopRecord = latestRecentStop(stock);
+      const shock = recentShockDay(stock);
+      const anchor = Number(stopRecord?.price) || Number(shock?.close) || 0;
+      if (!anchor || stock.price <= anchor) return { ready: false };
+      const confirmation = confirmationStatus(stock);
+      const announcement = announcementRiskStatus(stock);
+      const catalyst = announcement.positives.length > 0 || Boolean(stock.forecastData && stock.forecastData.buy + stock.forecastData.add > 0);
+      const reboundPct = (stock.price / anchor - 1) * 100;
+      const strongClose = stock.closePos >= 65 && stock.chg >= 2.5;
+      const participation = confirmation.count >= 2 || stock.volumeRatio >= 1.1 || stock.net > 0 || catalyst;
+      const ready = reboundPct >= 3 && strongClose && participation && announcement.level !== "高";
+      const limitPct = estimatedLimitPct(stock);
+      const nearLimit = stock.chg >= limitPct - .6;
+      const cancelBelow = +(Math.max(plan.stop, anchor * .985)).toFixed(priceDigits(stock.price));
+      const source = stopRecord ? `距上次止损价反弹${reboundPct.toFixed(1)}%` : `近期大跌后反弹${reboundPct.toFixed(1)}%`;
+      const catalystText = catalyst ? "，并有公告/机构催化" : "";
+      return {
+        ready,
+        nearLimit,
+        reboundPct: +reboundPct.toFixed(1),
+        cancelBelow,
+        reason: `${source}，收在日内${Math.round(stock.closePos)}%位置，${confirmation.count}/4项转强${catalystText}`
       };
     }
 
@@ -3106,8 +3190,8 @@
       const ledger = readSignalLedger();
       const quality = strategyQualityStatus(stock, plan);
       const candidates = [];
-      if (/低吸触发|突破触发|回落减仓预警|止损触发|减仓触发|止盈触发|保护止盈触发|直线诱多风险/.test(action[0])) {
-        candidates.push({ action: action[0], direction: /低吸触发|突破触发/.test(action[0]) ? "up" : "down" });
+      if (/低吸触发|突破触发|止损后重启|假跌破收复|回落减仓预警|止损确认|减仓触发|止盈触发|保护止盈触发|直线诱多风险/.test(action[0])) {
+        candidates.push({ action: action[0], direction: /低吸触发|突破触发|止损后重启|假跌破收复/.test(action[0]) ? "up" : "down" });
       }
       if (cycle?.topLevel === "高") candidates.push({ action: "逃顶策略", direction: "down" });
       if (cycle?.bottomReady) candidates.push({ action: "抄底策略", direction: "up" });
@@ -3240,8 +3324,8 @@
       const accuracy = measuredAccuracyStats();
       const holding = readHolding(stock.code);
       const hasHolding = Number(holding.cost) > 0 && Number(holding.shares) > 0;
-      const actionableBuy = /低吸触发|突破触发/.test(action[0]);
-      const actionableSell = /止损触发|减仓触发|止盈触发|保护止盈触发|回落减仓预警|逃顶减仓预警/.test(action[0]);
+      const actionableBuy = /低吸触发|突破触发|止损后重启/.test(action[0]);
+      const actionableSell = /止损确认|减仓触发|止盈触发|保护止盈触发|回落减仓预警|逃顶减仓预警/.test(action[0]);
       let position = "0成，继续观察";
       if (hasHolding) position = actionableSell ? "按卖出信号降低仓位" : "按固定止损管理现有仓位";
       else if (actionableBuy && quality.score >= 80) position = "2-3成试仓";
@@ -3671,7 +3755,7 @@
       const begin = new Date(now.getFullYear() - 2, now.getMonth(), now.getDate());
       const dateText = value => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
       const url = `https://reportapi.eastmoney.com/report/list?pageSize=8&beginTime=${dateText(begin)}&endTime=${dateText(now)}&code=${stock.code}&qType=0&pageNo=1`;
-      const response = await eastmoneyJsonp(url, 10000);
+      const response = await eastmoneyJsonp(url, 10000, "callback");
       return (response?.data || []).map(item => ({
         id: item.infoCode,
         title: item.title || "个股研报",
@@ -3696,7 +3780,7 @@
       }
       const items = stock.announcements;
       const riskPattern = /减持|立案|调查|问询|风险提示|退市|诉讼|冻结|质押|亏损|下修|解禁|处罚|停牌|终止|异常波动|监管/;
-      const positivePattern = /增持|回购|中标|预增|分红|业绩增长/;
+      const positivePattern = /增持|回购|中标|预增|业绩预告|业绩增长|收购|并购|订单|签订|突破|投产|分红/;
       const recent = items.filter(item => {
         const timestamp = Date.parse(`${item.date}T00:00:00+08:00`);
         return Number.isFinite(timestamp) && Date.now() - timestamp <= 30 * 24 * 60 * 60 * 1000;
@@ -3829,7 +3913,7 @@
       const text = String(value || "");
       const risk = /立案|调查|问询|处罚|退市|减持|冻结|诉讼|终止|停牌|风险提示|异常波动|传闻|未经证实/;
       const negative = /亏损|下修|下降|流出|违约|暴雷|裁员|被罚|订单减少|不及预期|解禁/;
-      const positive = /增持|回购|中标|预增|增长|突破|量产|涨价|订单|合作|获批|分红|超预期/;
+      const positive = /增持|回购|中标|预增|业绩预告|增长|收购|并购|突破|量产|涨价|订单|合作|获批|分红|超预期/;
       if (risk.test(text)) return { cls: "risk", label: "风险事件" };
       if (negative.test(text)) return { cls: "negative", label: "偏利空" };
       if (positive.test(text)) return { cls: "positive", label: "偏利好" };
@@ -5263,7 +5347,7 @@
         `本计划在${new Date(plan.createdAt).toLocaleTimeString("zh-CN", { hour12: false })}按${plan.anchorPrice}元生成；${planLockStatus(plan)}。`,
         `低吸只看固定区间${plan.buyLow}-${plan.buyHigh}，到价后还要满足资金不弱，不是碰到就买。`,
         `突破只认固定价${plan.breakout}，高于${plan.noChaseAbove}视为错过，今天不再追。`,
-        `持仓卖点固定为${plan.target1}先减仓、${plan.target2}再止盈；跌破${plan.stop}执行止损。`,
+        `持仓卖点固定为${plan.target1}先减仓、${plan.target2}再止盈；首次跌破${plan.stop}先观察，连续3分钟或到硬止损才确认。`,
         `${planEventText(plan)}。`,
         `当前结论：${action[0]}。${action[1]}，${action[2]}。`
       ];
@@ -5302,11 +5386,13 @@
 
     function actionCards(stock, plan) {
       const rr = riskRewardStatus(plan);
+      const stopStatus = stopLossStatus(stock, plan);
       return [
         ["低吸触发", `进入${plan.buyLow}-${plan.buyHigh}且主力不弱，才考虑小仓确认`],
         ["突破触发", `站上${plan.breakout}且不高于${plan.noChaseAbove}；跌回${rr.breakoutStop}视为失败`],
         ["分批卖出", `到${plan.target1}先减仓；之后回落到${plan.protectStop}保护止盈，到${plan.target2}再兑现`],
-        ["风险处理", `跌破固定止损${plan.stop}，当天计划失效`]
+        ["止损确认", `固定线${plan.stop}不变；连续3分钟跌破或到硬止损${stopStatus.hardStop}才确认`],
+        ["重新转强", "止损后反弹3%以上、收在日内高位且至少2项指标转强，允许小仓重启"]
       ];
     }
 
@@ -5324,6 +5410,7 @@
     function tradeTriggers(stock) {
       const plan = updateExecutionPlanEvents(stock, getExecutionPlan(stock));
       const signal = executionSignal(stock, plan);
+      const recovery = recoveryEntryStatus(stock, plan);
       const position = stock.stRiskLevel === "高" ? "0成，先排除" : stock.score >= 80 ? "2-3成试仓" : stock.score >= 65 ? "1-2成低吸" : "0-1成观察";
       return {
         plan,
@@ -5336,12 +5423,14 @@
         position,
         condition: signal[1],
         signal,
+        recovery,
         eventText: planEventText(plan)
       };
     }
 
     function holdingView(stock) {
       const planLevels = getExecutionPlan(stock);
+      const stopStatus = stopLossStatus(stock, planLevels);
       const holding = readHolding(stock.code);
       const cost = Number(holding.cost) || 0;
       const shares = Number(holding.shares) || 0;
@@ -5358,8 +5447,10 @@
             ? `已到一档止盈${planLevels.target1}，先减仓。`
             : planLevels.events?.target1 && stock.price <= planLevels.protectStop
               ? `一档止盈后已回落到保护线${planLevels.protectStop}，处理剩余仓位。`
-            : stock.price <= planLevels.stop
-              ? `已破固定止损${planLevels.stop}，优先控制风险。`
+            : stopStatus.confirmed
+              ? `止损已确认：${stopStatus.reason}，分批降低仓位。`
+              : stopStatus.currentBelow
+                ? `暂破止损${planLevels.stop}，连续${stopStatus.consecutive}/3分钟；先减风险仓，未确认不一键清仓。`
               : `卖点固定在${planLevels.target1}/${planLevels.target2}，止损${planLevels.stop}。`;
       return { holding, cost, shares, availableShares, todayReduced, profit, profitPct, maxRisk, plan };
     }
@@ -5372,9 +5463,9 @@
       if (spike?.detected && spike.decayRisk >= 60) alerts.push(["danger", `${spike.conclusion}：回落风险${spike.decayRisk}分，封板条件${spike.sealScore}分。`]);
       else if (spike?.detected && spike.sealScore >= 70) alerts.push(["", `${spike.conclusion}：封板条件${spike.sealScore}分，仍需观察封单。`]);
       if (stock.stRiskLevel === "高") alerts.push(["danger", "基本面/ST风险高：优先排除，不参与短线博弈。"]);
-      if (signal[0].includes("止损") || signal[0].includes("失效")) alerts.push(["danger", `${signal[0]}：${signal[1]}。`]);
+      if ((signal[0].includes("止损") && !signal[0].includes("重启")) || signal[0].includes("失效")) alerts.push(["danger", `${signal[0]}：${signal[1]}。`]);
       if (signal[0].includes("止盈") || signal[0].includes("减仓")) alerts.push(["warn", `${signal[0]}：${signal[1]}。`]);
-      if (signal[0].includes("低吸") || signal[0].includes("突破触发")) alerts.push(["", `${signal[0]}：${signal[1]}。`]);
+      if (signal[0].includes("低吸") || signal[0].includes("突破触发") || signal[0].includes("重启") || signal[0].includes("收复")) alerts.push(["", `${signal[0]}：${signal[1]}。`]);
       if (signal[0].includes("错过")) alerts.push(["warn", `${signal[0]}：${signal[1]}，不移动价位追高。`]);
       if (stock.net < 0) alerts.push(["warn", `主力净额为 ${fmtMoney(stock.net)}，盘中不要盲目加仓。`]);
       if (!alerts.length) alerts.push(["", `${signal[0]}：${signal[1]}。固定计划不会随刷新变化。`]);
@@ -5387,8 +5478,8 @@
         return { label: "待更新", cls: "", detail: "当前监控池暂无该股票行情" };
       }
       const move = item.price > 0 ? ((stock.price / item.price - 1) * 100) : 0;
-      const bullish = /低吸触发|突破触发|持有观察|候选/.test(item.action);
-      const bearish = /止损|减仓|止盈|风险|失效|错过|排除/.test(item.action);
+      const bullish = /低吸触发|突破触发|止损后重启|假跌破收复|持有观察|候选/.test(item.action);
+      const bearish = !bullish && /止损|减仓|止盈|风险|失效|错过|排除/.test(item.action);
       if (bullish && stock.price >= item.pressure) {
         return { label: "命中压力", cls: "safe", detail: `现价${stock.price}，较记录${move.toFixed(1)}%` };
       }
@@ -5427,7 +5518,8 @@
       if (!stock) return;
       const plan = updateExecutionPlanEvents(stock, getExecutionPlan(stock));
       const action = executionSignal(stock, plan);
-      const riskSignal = /止损|失效|风险/.test(action[0]);
+      const recoverySignal = /止损后重启|假跌破收复/.test(action[0]);
+      const riskSignal = !recoverySignal && /止损|失效|风险/.test(action[0]);
       const sellSignal = /止盈|减仓/.test(action[0]);
       const waitSignal = /等待|错过|未确认|观察|企稳/.test(action[0]);
       const cardClass = riskSignal ? "risk" : waitSignal || sellSignal ? "warn" : "";
@@ -5485,8 +5577,9 @@
         ${compactView ? `
           <section class="compact-plan">
             <div class="mini-card"><b>${triggers.signal[0]}</b>${triggers.signal[1]}<br><span class="code">${triggers.signal[2]}</span></div>
+            ${triggers.recovery.ready ? `<div class="mini-card"><b>止损后纠偏</b>${triggers.recovery.reason}<br><span class="code">重启结构已出现；当前操作仍服从上方唯一动作</span></div>` : ""}
             <div class="mini-card"><b>固定卖点</b>${triggers.takeProfit} 先减 / ${triggers.takeProfit2} 止盈<br><span class="code">不随实时价格上移</span></div>
-            <div class="mini-card"><b>仓位与风控</b>${triggers.position} · 跌破 ${triggers.stop} 当日计划失效</div>
+            <div class="mini-card"><b>仓位与风控</b>${triggers.position} · ${triggers.stop}首次跌破观察，连续3分钟或硬跌破才确认</div>
           </section>
           ${renderMobilePositionPanel(stock)}
           ${renderMobileDeepAnalysis(stock)}
